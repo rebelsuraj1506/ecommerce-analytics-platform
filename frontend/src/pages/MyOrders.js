@@ -19,6 +19,16 @@ function MyOrders({ token, userId }) {
     return isNaN(num) ? '0.00' : num.toFixed(2);
   };
 
+  // Normalize shipping address (API may return object or JSON string) and format for display
+  const getShippingDisplay = (addr) => {
+    if (!addr) return { line: null, phone: null };
+    const a = typeof addr === 'string' ? (() => { try { return JSON.parse(addr); } catch { return null; } })() : addr;
+    if (!a || typeof a !== 'object') return { line: null, phone: null };
+    const parts = [a.street, a.city, a.state].filter(Boolean);
+    const zip = a.zipCode ? ` - ${a.zipCode}` : '';
+    return { line: parts.length ? parts.join(', ') + zip : null, phone: a.phone || null };
+  };
+
   const cancellationReasons = [
     'Product no longer needed',
     'Found a better price elsewhere',
@@ -658,13 +668,18 @@ function MyOrders({ token, userId }) {
                         )}
 
                         {/* Delivery Address */}
-                        {order.shippingAddress && (
-                          <div style={{padding: '15px 20px', background: '#e8f5e9', borderTop: '1px solid #e0e0e0'}}>
-                            <div style={{fontSize: '13px', color: '#2e7d32'}}>
-                              <strong>📍 Delivery Address:</strong> {order.shippingAddress.street}, {order.shippingAddress.city}, {order.shippingAddress.state} - {order.shippingAddress.zipCode} | Phone: {order.shippingAddress.phone}
+                        {order.shippingAddress && (() => {
+                          const d = getShippingDisplay(order.shippingAddress);
+                          if (!d.line && !d.phone) return null;
+                          return (
+                            <div style={{padding: '15px 20px', background: '#e8f5e9', borderTop: '1px solid #e0e0e0'}}>
+                              <div style={{fontSize: '13px', color: '#2e7d32'}}>
+                                <strong>📍 Delivery Address:</strong> {d.line || '—'}
+                                {d.phone && <> | Phone: {d.phone}</>}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })()}
 
                         {/* Payment Info */}
                         <div style={{padding: '15px 20px', background: '#fff9e6', borderTop: '1px solid #e0e0e0'}}>

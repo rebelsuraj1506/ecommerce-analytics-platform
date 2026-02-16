@@ -25,6 +25,15 @@ function AdminPanel({ token }) {
     return isNaN(num) ? '0.00' : num.toFixed(2);
   };
 
+  const getShippingDisplay = (addr) => {
+    if (!addr) return { line: null, phone: null };
+    const a = typeof addr === 'string' ? (() => { try { return JSON.parse(addr); } catch { return null; } })() : addr;
+    if (!a || typeof a !== 'object') return { line: null, phone: null };
+    const parts = [a.street, a.city, a.state].filter(Boolean);
+    const zip = a.zipCode ? ` - ${a.zipCode}` : '';
+    return { line: parts.length ? parts.join(', ') + zip : null, phone: a.phone || null };
+  };
+
   const fetchData = async () => {
     try {
       // Fetch users first (most important for admin)
@@ -814,16 +823,19 @@ function AdminPanel({ token }) {
                             {firstItem?.quantity || 0} units × ₹{parseFloat(firstItem?.price || 0).toFixed(2)} = <strong style={{color: '#388e3c'}}>₹{order.totalAmount?.toFixed(2)}</strong>
                           </div>
                           
-                          {order.shippingAddress && (
-                            <div style={{marginTop: '10px', padding: '10px', background: '#e8f5e9', borderRadius: '4px'}}>
-                              <div style={{fontSize: '12px', fontWeight: '500', marginBottom: '5px'}}>📍 Shipping Address:</div>
-                              <div style={{fontSize: '13px'}}>
-                                {order.shippingAddress.street}, {order.shippingAddress.city}<br/>
-                                {order.shippingAddress.state} - {order.shippingAddress.zipCode}<br/>
-                                Phone: {order.shippingAddress.phone}
+                          {order.shippingAddress && (() => {
+                            const d = getShippingDisplay(order.shippingAddress);
+                            if (!d.line && !d.phone) return null;
+                            return (
+                              <div style={{marginTop: '10px', padding: '10px', background: '#e8f5e9', borderRadius: '4px'}}>
+                                <div style={{fontSize: '12px', fontWeight: '500', marginBottom: '5px'}}>📍 Shipping Address:</div>
+                                <div style={{fontSize: '13px'}}>
+                                  {d.line || '—'}
+                                  {d.phone && <><br/>Phone: {d.phone}</>}
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            );
+                          })()}
                           
                           {order.cancellationReason && (
                             <div style={{marginTop: '10px', padding: '10px', background: '#ffebee', borderRadius: '4px', borderLeft: '3px solid #f44336'}}>

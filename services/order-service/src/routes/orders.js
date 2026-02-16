@@ -3,6 +3,22 @@ const { body, param, query, validationResult } = require('express-validator');
 const { getPool } = require('../config/database');
 const router = express.Router();
 
+// Parse shipping_address from DB (stored as JSON string) to object for API response
+function parseShippingAddress(val) {
+  if (val == null || val === '') return null;
+  try {
+    return typeof val === 'string' ? JSON.parse(val) : val;
+  } catch {
+    return null;
+  }
+}
+
+// Add parsed shippingAddress to an order row from the DB
+function withParsedShippingAddress(row) {
+  if (!row) return row;
+  return { ...row, shippingAddress: parseShippingAddress(row.shipping_address) };
+}
+
 // Validation middleware
 const validateRequest = (req, res, next) => {
   const errors = validationResult(req);
@@ -93,7 +109,7 @@ router.get('/', [
         totalAmount: parseFloat(order.total_amount),
         status: order.status,
         paymentMethod: order.payment_method,
-        shippingAddress: order.shipping_address,
+        shippingAddress: parseShippingAddress(order.shipping_address),
         items: itemsResult.rows.map(item => ({
           productId: item.product_id,
           product_id: item.product_id,
@@ -213,7 +229,7 @@ router.post('/', [
           totalAmount: parseFloat(order.total_amount),
           status: order.status,
           paymentMethod: order.payment_method,
-          shippingAddress: order.shipping_address,
+          shippingAddress: parseShippingAddress(order.shipping_address),
           items: itemsData,
           createdAt: order.created_at,
           updatedAt: order.updated_at
@@ -322,7 +338,7 @@ router.put('/:id/status', [
       success: true,
       message: `Order status updated to ${status}`,
       data: {
-        order: result.rows[0]
+        order: withParsedShippingAddress(result.rows[0])
       }
     });
   } catch (error) {
@@ -394,7 +410,7 @@ router.post('/:id/cancel-request', [
       success: true,
       message: 'Cancellation request submitted successfully. Our team will review it within 24-48 hours.',
       data: {
-        order: result.rows[0]
+        order: withParsedShippingAddress(result.rows[0])
       }
     });
   } catch (error) {
@@ -464,7 +480,7 @@ router.put('/:id/approve-cancel', [
       success: true,
       message: 'Cancellation approved successfully. Refund will be processed within 5-7 business days.',
       data: {
-        order: result.rows[0]
+        order: withParsedShippingAddress(result.rows[0])
       }
     });
   } catch (error) {
@@ -540,7 +556,7 @@ router.put('/:id/reject-cancel', [
       success: true,
       message: 'Cancellation request rejected. Order will continue processing.',
       data: {
-        order: result.rows[0]
+        order: withParsedShippingAddress(result.rows[0])
       }
     });
   } catch (error) {
@@ -663,6 +679,7 @@ router.get('/:id', [
       data: {
         order: {
           ...order,
+          shippingAddress: parseShippingAddress(order.shipping_address),
           items: itemsResult.rows
         }
       }

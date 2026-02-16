@@ -18,6 +18,15 @@ function Orders({ token, userRole }) {
     return isNaN(num) ? '0.00' : num.toFixed(2);
   };
 
+  const getShippingDisplay = (addr) => {
+    if (!addr) return { line: null, phone: null };
+    const a = typeof addr === 'string' ? (() => { try { return JSON.parse(addr); } catch { return null; } })() : addr;
+    if (!a || typeof a !== 'object') return { line: null, phone: null };
+    const parts = [a.street, a.city, a.state].filter(Boolean);
+    const zip = a.zipCode ? ` - ${a.zipCode}` : '';
+    return { line: parts.length ? parts.join(', ') + zip : null, phone: a.phone || null };
+  };
+
   // Order statuses with their transitions
   const orderStatuses = {
     pending: { 
@@ -405,22 +414,26 @@ function Orders({ token, userRole }) {
                       </div>
 
                       {/* Shipping Address */}
-                      {order.shippingAddress && (
-                        <div style={{
-                          background: '#e8f5e9',
-                          padding: '12px',
-                          borderRadius: '4px',
-                          marginBottom: '15px'
-                        }}>
-                          <div style={{fontSize: '12px', fontWeight: '500', marginBottom: '5px', color: '#2e7d32'}}>
-                            📍 Delivery Address:
+                      {order.shippingAddress && (() => {
+                        const d = getShippingDisplay(order.shippingAddress);
+                        if (!d.line && !d.phone) return null;
+                        return (
+                          <div style={{
+                            background: '#e8f5e9',
+                            padding: '12px',
+                            borderRadius: '4px',
+                            marginBottom: '15px'
+                          }}>
+                            <div style={{fontSize: '12px', fontWeight: '500', marginBottom: '5px', color: '#2e7d32'}}>
+                              📍 Delivery Address:
+                            </div>
+                            <div style={{fontSize: '13px', color: '#1b5e20'}}>
+                              {d.line || '—'}
+                              {d.phone && <><br/>Phone: {d.phone}</>}
+                            </div>
                           </div>
-                          <div style={{fontSize: '13px', color: '#1b5e20'}}>
-                            {order.shippingAddress.street}, {order.shippingAddress.city}, {order.shippingAddress.state} - {order.shippingAddress.zipCode}
-                            <br/>Phone: {order.shippingAddress.phone}
-                          </div>
-                        </div>
-                      )}
+                        );
+                      })()}
 
                       {/* Tracking Info */}
                       {order.trackingNumber && (
