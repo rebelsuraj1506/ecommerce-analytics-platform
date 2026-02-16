@@ -184,7 +184,7 @@ function App() {
             {isAdmin ? (
               <Route path="/admin" element={<AdminPanel token={token} />} />
             ) : (
-              <Route path="/my-orders" element={<MyOrders token={token} userId={user.id} />} />
+              <Route path="/my-orders" element={<MyOrders token={token} userId={user.id} userName={user.name} />} />
             )}
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>

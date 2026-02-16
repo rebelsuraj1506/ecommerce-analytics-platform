@@ -81,7 +81,8 @@ const connectDB = async () => {
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_status VARCHAR(50)`,
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_amount DECIMAL(10, 2)`,
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_processing_at TIMESTAMP`,
-      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMP`
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMP`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS inventory_deducted BOOLEAN DEFAULT false`
     ];
     for (const sql of alterColumns) {
       await client.query(sql);

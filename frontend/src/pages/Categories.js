@@ -137,7 +137,8 @@ function Categories({ token }) {
                     background: '#f0f0f0'
                   }}>
                     {products.map(product => {
-                      const totalValue = product.price * product.inventory;
+                      const inv = Number(product.inventory) || 0;
+                      const totalValue = product.price * inv;
                       const imageUrl = product.images?.[0] || 'https://via.placeholder.com/200x200?text=No+Image';
                       
                       return (
@@ -156,21 +157,38 @@ function Categories({ token }) {
                                 padding: '15px'
                               }}
                             />
-                            {product.inventory > 0 && (
+                            {(inv > 0 ? (
                               <div style={{
                                 position: 'absolute',
                                 bottom: '8px',
                                 left: '8px',
-                                background: product.inventory > 20 ? '#388e3c' : '#ff9800',
+                                background: inv > 20 ? '#388e3c' : '#ff9800',
                                 color: 'white',
                                 padding: '3px 8px',
                                 borderRadius: '2px',
                                 fontSize: '10px',
                                 fontWeight: '500'
                               }}>
-                                {product.inventory} units
+                                {inv} units
                               </div>
-                            )}
+                            ) : (
+                              <div 
+                                style={{
+                                  position: 'absolute',
+                                  bottom: '8px',
+                                  left: '8px',
+                                  background: '#757575',
+                                  color: 'white',
+                                  padding: '3px 8px',
+                                  borderRadius: '2px',
+                                  fontSize: '10px',
+                                  fontWeight: '500'
+                                }}
+                                title="Will be back soon"
+                              >
+                                Sold out
+                              </div>
+                            ))}
                           </div>
 
                           <h4 style={{
@@ -184,7 +202,9 @@ function Categories({ token }) {
                           }}>
                             {product.name}
                           </h4>
-
+                          {(product.rating?.count > 0 || (product.reviews && product.reviews.length > 0)) && (
+                            <div style={{fontSize: '11px', color: '#ff9800', marginBottom: '6px'}}>★ {(product.rating?.average ?? 0).toFixed(1)} ({product.rating?.count ?? product.reviews?.length ?? 0} reviews)</div>
+                          )}
                           <div style={{fontSize: '11px', color: '#757575', marginBottom: '10px', height: '30px', overflow: 'hidden'}}>
                             {product.description}
                           </div>
@@ -196,7 +216,7 @@ function Categories({ token }) {
                             </div>
                             <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '12px'}}>
                               <span style={{color: '#757575'}}>Inventory:</span>
-                              <strong style={{color: '#2874f0'}}>{product.inventory}</strong>
+                              <strong style={{color: '#2874f0'}}>{inv}</strong>
                             </div>
                             <div style={{display: 'flex', justifyContent: 'space-between', paddingTop: '6px', borderTop: '1px dashed #f0f0f0', fontSize: '12px'}}>
                               <span style={{color: '#757575'}}>Total:</span>

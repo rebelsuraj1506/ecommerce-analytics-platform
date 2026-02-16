@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
 
-function MyOrders({ token, userId }) {
+function MyOrders({ token, userId, userName }) {
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState({});
   const [showCancelModal, setShowCancelModal] = useState(null);
+  const [reviewModal, setReviewModal] = useState(null); // { orderId, productId, productName }
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expandedTracking, setExpandedTracking] = useState(null);
@@ -227,6 +231,37 @@ function MyOrders({ token, userId }) {
     const newImages = [...cancelData.images];
     newImages[index] = value;
     setCancelData({...cancelData, images: newImages});
+  };
+
+  const handleSubmitReview = async () => {
+    if (!reviewModal) return;
+    setReviewSubmitting(true);
+    try {
+      const res = await fetch(`http://localhost:8003/api/orders/${reviewModal.orderId}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          productId: reviewModal.productId,
+          rating: reviewRating,
+          comment: reviewComment.trim(),
+          userName: userName || 'User'
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert('✅ Thank you! Your review has been submitted.');
+        setReviewModal(null);
+        setReviewRating(5);
+        setReviewComment('');
+        fetchProducts(); // refresh product data (rating updated)
+      } else {
+        alert(data.message || 'Failed to submit review');
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setReviewSubmitting(false);
+    }
   };
 
   const removeImageUrl = (index) => {
@@ -567,25 +602,34 @@ function MyOrders({ token, userId }) {
                         </button>
                       )}
                       
-                      {order.status === 'delivered' && (
-                        <button 
-                          style={{
-                            padding: '10px 20px',
-                            background: '#ff9800',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                            fontWeight: '500',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px'
-                          }}
-                        >
-                          <span>⭐</span>
-                          <span>Rate Product</span>
-                        </button>
+                      {order.status === 'delivered' && order.items?.length > 0 && (
+                        <div style={{display: 'flex', flexDirection: 'column', gap: '8px', width: '100%'}}>
+                          <div style={{fontSize: '12px', fontWeight: '600', color: '#212121', marginBottom: '4px'}}>Rate your purchase:</div>
+                          {order.items.map((item, idx) => {
+                            const pid = item.product_id || item.productId;
+                            const pName = item.name || (products[pid] && products[pid].name) || `Item ${idx + 1}`;
+                            return (
+                              <div key={pid || idx} style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#fff8e1', borderRadius: '4px'}}>
+                                <span style={{fontSize: '13px', color: '#212121'}}>{pName}</span>
+                                <button 
+                                  onClick={() => setReviewModal({ orderId: order.id, productId: pid, productName: pName })}
+                                  style={{
+                                    padding: '6px 14px',
+                                    background: '#ff9800',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontSize: '12px',
+                                    fontWeight: '500'
+                                  }}
+                                >
+                                  ⭐ Review
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
 
@@ -752,6 +796,46 @@ function MyOrders({ token, userId }) {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Review Product Modal */}
+        {reviewModal && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px'
+          }}>
+            <div style={{background: 'white', borderRadius: '8px', maxWidth: '440px', width: '100%', boxShadow: '0 10px 40px rgba(0,0,0,0.3)', padding: '24px'}}>
+              <h3 style={{margin: '0 0 8px 0', fontSize: '18px', color: '#212121'}}>⭐ Rate your purchase</h3>
+              <p style={{margin: '0 0 20px 0', fontSize: '14px', color: '#757575'}}>{reviewModal.productName}</p>
+              <div style={{marginBottom: '16px'}}>
+                <div style={{fontSize: '14px', fontWeight: '500', marginBottom: '8px', color: '#212121'}}>Rating</div>
+                <div style={{display: 'flex', gap: '8px'}}>
+                  {[1,2,3,4,5].map(star => (
+                    <button key={star} type="button" onClick={() => setReviewRating(star)}
+                      style={{
+                        padding: '8px 12px', border: '1px solid #e0e0e0', borderRadius: '4px',
+                        background: reviewRating >= star ? '#ff9800' : '#f5f5f5', color: reviewRating >= star ? 'white' : '#757575',
+                        cursor: 'pointer', fontSize: '18px'
+                      }}
+                    >★</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{marginBottom: '20px'}}>
+                <label style={{display: 'block', fontSize: '14px', fontWeight: '500', marginBottom: '8px', color: '#212121'}}>Review (optional)</label>
+                <textarea value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} placeholder="Share your experience..."
+                  rows={3} style={{width: '100%', padding: '10px', border: '1px solid #e0e0e0', borderRadius: '4px', fontSize: '14px', boxSizing: 'border-box'}} />
+              </div>
+              <div style={{display: 'flex', gap: '10px', justifyContent: 'flex-end'}}>
+                <button type="button" onClick={() => { setReviewModal(null); setReviewRating(5); setReviewComment(''); }}
+                  style={{padding: '10px 20px', background: '#e0e0e0', color: '#212121', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '500'}}>Cancel</button>
+                <button type="button" onClick={handleSubmitReview} disabled={reviewSubmitting}
+                  style={{padding: '10px 20px', background: '#ff9800', color: 'white', border: 'none', borderRadius: '4px', cursor: reviewSubmitting ? 'not-allowed' : 'pointer', fontWeight: '500'}}>
+                  {reviewSubmitting ? 'Submitting...' : 'Submit Review'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

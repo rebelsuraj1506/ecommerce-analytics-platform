@@ -150,6 +150,20 @@ curl -X POST http://localhost:8001/api/auth/register \
   }'
 ```
 
+4. **Sync inventory for previous orders (one-time)**  
+If you had orders placed before inventory deduction was enabled, run this once (as admin) so product stock reflects those orders:
+```bash
+curl -X POST http://localhost:8003/api/orders/sync-inventory \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+Response includes `synced` (count of orders processed) and any `errors` or `skippedOrderIds`.  
+If inventory was zeroed by mistake (e.g. sync ran multiple times), restore it with:
+```bash
+curl -X POST http://localhost:8003/api/orders/undo-sync-inventory \
+  -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
+```
+Then run `sync-inventory` again once if needed.
+
 ## 🔧 Development
 
 ### Running Individual Services

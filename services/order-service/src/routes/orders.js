@@ -1,7 +1,26 @@
 const express = require('express');
+const axios = require('axios');
 const { body, param, query, validationResult } = require('express-validator');
 const { getPool } = require('../config/database');
 const router = express.Router();
+
+const PRODUCT_SERVICE_URL = process.env.PRODUCT_SERVICE_URL || 'http://localhost:8002';
+
+// Adjust product inventory (change: negative = deduct, positive = restore). Returns { success, error? }.
+async function adjustProductInventory(productId, change) {
+  try {
+    const res = await axios.patch(
+      `${PRODUCT_SERVICE_URL}/api/products/${productId}/inventory`,
+      { change },
+      { timeout: 10000 }
+    );
+    return { success: true, data: res.data };
+  } catch (err) {
+    const message = err.response?.data?.message || err.message;
+    const status = err.response?.status;
+    return { success: false, error: message, status };
+  }
+}
 
 // Parse shipping_address from DB (stored as JSON string) to object for API response
 function parseShippingAddress(val) {
@@ -185,13 +204,36 @@ router.post('/', [
     const { items, paymentMethod, shippingAddress } = req.body;
     const userId = req.user.id;
 
+    // Deduct inventory for each item (fail order if any product has insufficient stock)
+    const decremented = [];
+    for (const item of items) {
+      const result = await adjustProductInventory(item.productId, -item.quantity);
+      if (!result.success) {
+        // Rollback: restore inventory for already-decremented items
+        for (const d of decremented) {
+          await adjustProductInventory(d.productId, d.quantity);
+        }
+        await client.query('ROLLBACK');
+        const isInsufficient = (result.error || '').toLowerCase().includes('insufficient');
+        const message = result.status === 404
+          ? (result.error || 'Product not found')
+          : (isInsufficient ? 'This item is sold out. Will be back soon.' : (result.error || 'Failed to reserve inventory'));
+        return res.status(result.status === 404 ? 404 : 400).json({
+          success: false,
+          message,
+          productId: item.productId
+        });
+      }
+      decremented.push({ productId: item.productId, quantity: item.quantity });
+    }
+
     // Calculate total amount
     const totalAmount = items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
 
-    // Insert order
+    // Insert order (inventory_deducted = true since we deducted above)
     const orderQuery = `
-      INSERT INTO orders (user_id, total_amount, payment_method, shipping_address, status)
-      VALUES ($1, $2, $3, $4, 'pending')
+      INSERT INTO orders (user_id, total_amount, payment_method, shipping_address, status, inventory_deducted)
+      VALUES ($1, $2, $3, $4, 'pending', true)
       RETURNING *
     `;
     const orderResult = await client.query(orderQuery, [userId, totalAmount, paymentMethod, JSON.stringify(shippingAddress)]);
@@ -242,6 +284,110 @@ router.post('/', [
     res.status(500).json({
       success: false,
       message: 'Failed to create order',
+      error: error.message
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// Sync inventory for previous orders (orders placed before inventory deduction was implemented)
+// Admin only. Deducts order quantities from products for all orders that have inventory_deducted = false
+// and status not cancelled/refunded, then marks those orders as inventory_deducted = true.
+router.post('/sync-inventory', validateRequest, extractUser, async (req, res) => {
+  const pool = getPool();
+  const client = await pool.connect();
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only admins can run inventory sync'
+      });
+    }
+    const ordersResult = await client.query(
+      `SELECT id FROM orders WHERE (inventory_deducted = false OR inventory_deducted IS NULL) AND status NOT IN ('cancelled', 'refunded') ORDER BY id ASC`
+    );
+    let synced = 0;
+    const skipped = [];
+    const errors = [];
+    for (const row of ordersResult.rows) {
+      const itemsRes = await client.query('SELECT product_id, quantity FROM order_items WHERE order_id = $1', [row.id]);
+      const decremented = [];
+      let fail = false;
+      for (const item of itemsRes.rows) {
+        const result = await adjustProductInventory(item.product_id, -item.quantity);
+        if (!result.success) {
+          for (const d of decremented) {
+            await adjustProductInventory(d.product_id, d.quantity);
+          }
+          errors.push({ orderId: row.id, productId: item.product_id, error: result.error });
+          fail = true;
+          break;
+        }
+        decremented.push({ product_id: item.product_id, quantity: item.quantity });
+      }
+      if (!fail) {
+        await client.query('UPDATE orders SET inventory_deducted = true WHERE id = $1', [row.id]);
+        synced++;
+      } else {
+        skipped.push(row.id);
+      }
+    }
+    res.status(200).json({
+      success: true,
+      message: 'Inventory sync completed',
+      data: { synced, skippedCount: skipped.length, skippedOrderIds: skipped, errors }
+    });
+  } catch (error) {
+    console.error('Error syncing inventory:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to sync inventory',
+      error: error.message
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// Undo inventory sync: restore product inventory for orders that were synced (inventory_deducted = true).
+// Use this if sync was run by mistake or ran multiple times and zeroed inventory. Admin only.
+router.post('/undo-sync-inventory', validateRequest, extractUser, async (req, res) => {
+  const pool = getPool();
+  const client = await pool.connect();
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only admins can run undo sync'
+      });
+    }
+    const ordersResult = await client.query(
+      `SELECT id FROM orders WHERE inventory_deducted = true AND status NOT IN ('cancelled', 'refunded') ORDER BY id ASC`
+    );
+    let restored = 0;
+    const errors = [];
+    for (const row of ordersResult.rows) {
+      const itemsRes = await client.query('SELECT product_id, quantity FROM order_items WHERE order_id = $1', [row.id]);
+      for (const item of itemsRes.rows) {
+        const adj = await adjustProductInventory(item.product_id, item.quantity);
+        if (!adj.success) {
+          errors.push({ orderId: row.id, productId: item.product_id, error: adj.error });
+        }
+      }
+      await client.query('UPDATE orders SET inventory_deducted = false WHERE id = $1', [row.id]);
+      restored++;
+    }
+    res.status(200).json({
+      success: true,
+      message: 'Undo sync completed. Inventory restored for previously synced orders. You can run sync-inventory again if needed.',
+      data: { restoredOrderCount: restored, errors }
+    });
+  } catch (error) {
+    console.error('Error undoing sync:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to undo sync',
       error: error.message
     });
   } finally {
@@ -317,6 +463,13 @@ router.put('/:id/status', [
     }
 
     params.push(orderId);
+
+    // If transitioning to cancelled, get current status so we only restore inventory if not yet delivered
+    let previousStatus = null;
+    if (status === 'cancelled') {
+      const prev = await client.query('SELECT status FROM orders WHERE id = $1', [orderId]);
+      if (prev.rows.length > 0) previousStatus = prev.rows[0].status;
+    }
     
     const updateQuery = `
       UPDATE orders
@@ -332,6 +485,20 @@ router.put('/:id/status', [
         success: false,
         message: 'Order not found'
       });
+    }
+
+    // When order is set to cancelled and was not already delivered/cancelled, restore inventory only if we had deducted it
+    const orderRow = result.rows[0];
+    const hadDeducted = orderRow.inventory_deducted === true;
+    const shouldRestore = status === 'cancelled' && previousStatus && !['cancelled', 'delivered', 'refunded'].includes(previousStatus) && hadDeducted;
+    if (shouldRestore) {
+      const itemsRes = await client.query('SELECT product_id, quantity FROM order_items WHERE order_id = $1', [orderId]);
+      for (const row of itemsRes.rows) {
+        const adj = await adjustProductInventory(row.product_id, row.quantity);
+        if (!adj.success) {
+          console.error(`Failed to restore inventory for product ${row.product_id}:`, adj.error);
+        }
+      }
     }
 
     res.status(200).json({
@@ -475,6 +642,18 @@ router.put('/:id/approve-cancel', [
     `;
     
     const result = await client.query(updateQuery, [req.user.id, orderId]);
+    const orderRow = result.rows[0];
+
+    // Restore inventory only if we had deducted it (inventory_deducted = true)
+    if (orderRow.inventory_deducted === true) {
+      const itemsRes = await client.query('SELECT product_id, quantity FROM order_items WHERE order_id = $1', [orderId]);
+      for (const row of itemsRes.rows) {
+        const adj = await adjustProductInventory(row.product_id, row.quantity);
+        if (!adj.success) {
+          console.error(`Failed to restore inventory for product ${row.product_id}:`, adj.error);
+        }
+      }
+    }
 
     res.status(200).json({
       success: true,
@@ -565,6 +744,75 @@ router.put('/:id/reject-cancel', [
       success: false,
       message: 'Failed to reject cancellation',
       error: error.message
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// Submit a review for a product that was in a delivered order (user must have received the order)
+router.post('/:orderId/review', [
+  param('orderId').isInt({ min: 1 }).withMessage('Invalid order ID'),
+  body('productId').notEmpty().withMessage('Product ID is required'),
+  body('rating').isInt({ min: 1, max: 5 }).withMessage('Rating must be between 1 and 5'),
+  body('comment').optional().trim().isString().isLength({ max: 2000 }),
+  body('userName').optional().trim().isString()
+], validateRequest, extractUser, async (req, res) => {
+  const pool = getPool();
+  const client = await pool.connect();
+  try {
+    const orderId = req.params.orderId;
+    const userId = req.user.id;
+    const { productId, rating, comment, userName } = req.body;
+
+    const orderRow = await client.query(
+      'SELECT id, status, user_id FROM orders WHERE id = $1 AND user_id = $2',
+      [orderId, userId]
+    );
+    if (orderRow.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+    if (orderRow.rows[0].status !== 'delivered') {
+      return res.status(400).json({
+        success: false,
+        message: 'You can only review products from delivered orders'
+      });
+    }
+
+    const itemRow = await client.query(
+      'SELECT product_id FROM order_items WHERE order_id = $1 AND product_id = $2',
+      [orderId, productId]
+    );
+    if (itemRow.rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'This product was not in this order'
+      });
+    }
+
+    const reviewRes = await axios.post(
+      `${PRODUCT_SERVICE_URL}/api/products/${productId}/reviews`,
+      { userId, userName: userName || 'User', rating, comment: comment || '' },
+      { timeout: 10000 }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Review submitted successfully',
+      data: reviewRes.data?.data
+    });
+  } catch (err) {
+    if (err.response?.status === 400) {
+      return res.status(400).json({
+        success: false,
+        message: err.response?.data?.message || 'Already reviewed or invalid request'
+      });
+    }
+    console.error('Error submitting review:', err);
+    res.status(500).json({
+      success: false,
+      message: err.response?.data?.message || 'Failed to submit review',
+      error: err.message
     });
   } finally {
     client.release();

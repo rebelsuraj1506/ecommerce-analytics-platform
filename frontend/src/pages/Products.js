@@ -203,37 +203,82 @@ function Products({ token, userRole }) {
           {products.map(product => {
             const isEditing = editingProduct?._id === product._id;
             const imageUrl = product.images?.[0] || getProductImage(product.name, product.category);
-            const inStock = product.inventory > 0;
+            const inv = Number(product.inventory);
+            const inventory = typeof inv === 'number' && !Number.isNaN(inv) ? inv : 0;
+            const inStock = inventory > 0;
             
             return (
-              <div key={product._id} style={{background: 'white', borderRadius: '2px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.08)', transition: 'box-shadow 0.3s'}}
+              <div 
+                key={product._id} 
+                style={{background: 'white', borderRadius: '2px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.08)', transition: 'box-shadow 0.3s'}}
                 onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'}
-                onMouseLeave={(e) => e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.08)'}>
+                onMouseLeave={(e) => e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.08)'}
+                title={!inStock ? 'Will be back soon' : undefined}
+              >
                 
                 <div style={{position: 'relative', paddingTop: '100%', background: '#fff', borderBottom: '1px solid #f0f0f0'}}>
                   <img src={imageUrl} alt={product.name} style={{position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover'}}
                     onError={(e) => { e.target.src = `https://placehold.co/400x400/e0e0e0/757575?text=${encodeURIComponent(product.name?.substring(0,15) || 'Product')}`; }}
                   />
-                  <div style={{position: 'absolute', bottom: '10px', left: '10px', background: inStock ? (product.inventory > 20 ? '#388e3c' : '#ff9800') : '#f44336', color: 'white', padding: '4px 10px', borderRadius: '2px', fontSize: '11px', fontWeight: '500'}}>
-                    {inStock ? `${product.inventory} in stock` : 'Out of Stock'}
+                  <div 
+                    style={{position: 'absolute', bottom: '10px', left: '10px', background: inStock ? (inventory > 20 ? '#388e3c' : '#ff9800') : '#757575', color: 'white', padding: '4px 10px', borderRadius: '2px', fontSize: '11px', fontWeight: '500'}}
+                    title={!inStock ? 'Will be back soon' : undefined}
+                  >
+                    {inStock ? `${inventory} in stock` : 'Sold out'}
                   </div>
                 </div>
 
                 <div style={{padding: '16px'}}>
-                  <div style={{fontSize: '12px', color: '#878787', marginBottom: '4px', textTransform: 'uppercase'}}>{product.category}</div>
-                  <h3 style={{margin: '0 0 8px 0', fontSize: '14px', fontWeight: '500', color: '#212121', height: '40px', overflow: 'hidden', lineHeight: '1.4'}}>{product.name}</h3>
-                  <p style={{color: '#878787', fontSize: '12px', margin: '0 0 12px 0', height: '36px', overflow: 'hidden', lineHeight: '1.5'}}>{product.description}</p>
+                  {isEditing ? (
+                    <>
+                      <select value={editingProduct.category} onChange={(e) => setEditingProduct({...editingProduct, category: e.target.value})} style={{width: '100%', padding: '8px', marginBottom: '8px', fontSize: '12px', border: '1px solid #e0e0e0', borderRadius: '2px'}}>
+                        <option value="electronics">Electronics</option>
+                        <option value="clothing">Clothing</option>
+                        <option value="books">Books</option>
+                        <option value="home">Home & Kitchen</option>
+                        <option value="sports">Sports</option>
+                        <option value="toys">Toys</option>
+                      </select>
+                      <input type="text" value={editingProduct.name || ''} onChange={(e) => setEditingProduct({...editingProduct, name: e.target.value})} placeholder="Product name" style={{width: '100%', padding: '8px', marginBottom: '8px', fontSize: '14px', border: '1px solid #e0e0e0', borderRadius: '2px', boxSizing: 'border-box'}} />
+                      <textarea value={editingProduct.description || ''} onChange={(e) => setEditingProduct({...editingProduct, description: e.target.value})} placeholder="Description" rows={2} style={{width: '100%', padding: '8px', marginBottom: '8px', fontSize: '12px', border: '1px solid #e0e0e0', borderRadius: '2px', boxSizing: 'border-box', resize: 'vertical'}} />
+                      <div style={{display: 'flex', gap: '8px', marginBottom: '8px'}}>
+                        <input type="number" step="0.01" value={editingProduct.price ?? ''} onChange={(e) => setEditingProduct({...editingProduct, price: e.target.value})} placeholder="Price" style={{flex: 1, padding: '8px', fontSize: '14px', border: '1px solid #e0e0e0', borderRadius: '2px'}} />
+                        <input type="number" min="0" value={editingProduct.inventory ?? ''} onChange={(e) => setEditingProduct({...editingProduct, inventory: e.target.value})} placeholder="Stock" style={{flex: 1, padding: '8px', fontSize: '14px', border: '1px solid #e0e0e0', borderRadius: '2px'}} />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{fontSize: '12px', color: '#878787', marginBottom: '4px', textTransform: 'uppercase'}}>{product.category}</div>
+                      <h3 style={{margin: '0 0 8px 0', fontSize: '14px', fontWeight: '500', color: '#212121', height: '40px', overflow: 'hidden', lineHeight: '1.4'}}>{product.name}</h3>
+                      <p style={{color: '#878787', fontSize: '12px', margin: '0 0 12px 0', height: '36px', overflow: 'hidden', lineHeight: '1.5'}}>{product.description}</p>
+                      {(product.rating?.count > 0 || (product.reviews && product.reviews.length > 0)) && (
+                        <div style={{marginBottom: '6px'}}>
+                          <div style={{fontSize: '12px', color: '#ff9800', fontWeight: '500'}}>★ {(product.rating?.average ?? 0).toFixed(1)} ({product.rating?.count ?? product.reviews?.length ?? 0} reviews)</div>
+                          {product.reviews && product.reviews.length > 0 && (
+                            <div style={{fontSize: '11px', color: '#757575', marginTop: '4px', maxHeight: '36px', overflow: 'hidden'}}>
+                              {product.reviews.slice(0, 2).map((r, i) => (
+                                <div key={i} style={{marginBottom: '2px'}}>"{r.comment ? (r.comment.length > 40 ? r.comment.slice(0, 40) + '…' : r.comment) : 'Rated ' + r.rating + '★'}" — {r.userName || 'User'}</div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
 
                   <div style={{borderTop: '1px solid #f0f0f0', paddingTop: '12px'}}>
-                    <div style={{display: 'flex', alignItems: 'baseline', marginBottom: '12px'}}>
-                      <span style={{fontSize: '20px', fontWeight: '500', color: '#212121'}}>₹{product.price?.toFixed(2)}</span>
-                    </div>
+                    {!isEditing && (
+                      <div style={{display: 'flex', alignItems: 'baseline', marginBottom: '12px'}}>
+                        <span style={{fontSize: '20px', fontWeight: '500', color: '#212121'}}>₹{product.price?.toFixed(2)}</span>
+                      </div>
+                    )}
 
                     {/* User: Buy Now button */}
                     {!isAdmin && (
                       <button 
                         onClick={() => inStock ? setOrderModal(product) : null}
                         disabled={!inStock}
+                        title={!inStock ? 'Will be back soon' : undefined}
                         style={{
                           width: '100%', padding: '12px', 
                           background: inStock ? 'linear-gradient(135deg, #fb641b 0%, #ff9f00 100%)' : '#e0e0e0',
@@ -242,7 +287,7 @@ function Products({ token, userRole }) {
                           fontWeight: '600', fontSize: '14px', letterSpacing: '0.5px'
                         }}
                       >
-                        {inStock ? '🛒 BUY NOW' : 'OUT OF STOCK'}
+                        {inStock ? '🛒 BUY NOW' : 'Sold out'}
                       </button>
                     )}
 
@@ -320,7 +365,7 @@ function Products({ token, userRole }) {
                       <div style={{flex: 1}}>
                         <div style={{fontWeight: '500', fontSize: '15px', marginBottom: '5px'}}>{orderModal.name}</div>
                         <div style={{fontSize: '18px', fontWeight: '600', color: '#388e3c'}}>₹{orderModal.price?.toFixed(2)}</div>
-                        <div style={{fontSize: '12px', color: '#757575', marginTop: '3px'}}>{orderModal.inventory} available</div>
+                        <div style={{fontSize: '12px', color: '#757575', marginTop: '3px'}}>{(Number(orderModal.inventory) || 0)} available</div>
                       </div>
                     </div>
 
@@ -329,9 +374,9 @@ function Products({ token, userRole }) {
                       <label style={{display: 'block', fontWeight: '500', marginBottom: '8px', fontSize: '14px'}}>Quantity</label>
                       <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
                         <button onClick={() => setOrderQuantity(Math.max(1, orderQuantity - 1))} style={{width: '36px', height: '36px', border: '1px solid #e0e0e0', borderRadius: '4px', background: 'white', cursor: 'pointer', fontSize: '18px'}}>−</button>
-                        <input type="number" value={orderQuantity} min="1" max={orderModal.inventory} onChange={(e) => setOrderQuantity(Math.min(orderModal.inventory, Math.max(1, parseInt(e.target.value) || 1)))}
+                        <input type="number" value={orderQuantity} min="1" max={Math.max(1, Number(orderModal.inventory) || 0)} onChange={(e) => setOrderQuantity(Math.min(Math.max(1, Number(orderModal.inventory) || 0), Math.max(1, parseInt(e.target.value) || 1)))}
                           style={{width: '60px', textAlign: 'center', padding: '8px', border: '1px solid #e0e0e0', borderRadius: '4px', fontSize: '16px'}} />
-                        <button onClick={() => setOrderQuantity(Math.min(orderModal.inventory, orderQuantity + 1))} style={{width: '36px', height: '36px', border: '1px solid #e0e0e0', borderRadius: '4px', background: 'white', cursor: 'pointer', fontSize: '18px'}}>+</button>
+                        <button onClick={() => setOrderQuantity(Math.min(Math.max(1, Number(orderModal.inventory) || 0), orderQuantity + 1))} style={{width: '36px', height: '36px', border: '1px solid #e0e0e0', borderRadius: '4px', background: 'white', cursor: 'pointer', fontSize: '18px'}}>+</button>
                         <span style={{fontSize: '16px', fontWeight: '600', color: '#212121', marginLeft: '15px'}}>
                           Total: ₹{(orderModal.price * orderQuantity).toFixed(2)}
                         </span>
