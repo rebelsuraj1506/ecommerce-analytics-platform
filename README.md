@@ -73,6 +73,15 @@ ecommerce-analytics-platform/
 └── docker-compose.yml        # Local development
 ```
 
+## 📚 Documentation
+
+| Document | Description |
+|----------|-------------|
+| [QUICKSTART.md](./QUICKSTART.md) | Step-by-step setup with env examples and health checks |
+| [COMMANDS.md](./COMMANDS.md) | Command reference: Docker, DB, API testing, troubleshooting |
+| [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) | AWS EC2, RDS, S3 deployment guide |
+| [PROJECT_SUMMARY.md](./PROJECT_SUMMARY.md) | What’s built and project structure |
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -111,24 +120,21 @@ docker-compose ps
 ```
 
 5. **Access the application**
-- Frontend Dashboard: http://localhost:3000
-- API Gateway: http://localhost:8000
-- User Service: http://localhost:8001
-- Product Service: http://localhost:8002
-- Order Service: http://localhost:8003
-- Analytics Service: http://localhost:8004
+- **Frontend Dashboard:** http://localhost:3000 (login and use the app here)
+- **API Gateway:** http://localhost:8000 (use this for unified API + rate limiting)
+- **Services (direct):** User 8001 | Product 8002 | Order 8003 | Analytics 8004  
+
+The React app currently calls services directly on ports 8001–8004. For production, route all traffic via the API Gateway (8000).
 
 ### First Time Setup
 
-1. **Initialize databases**
+1. **Initialize databases (optional)**
 ```bash
-# Run database migrations
+# User service migrations (if available)
 docker-compose exec user-service npm run migrate
-docker-compose exec order-service npm run migrate
-```
 
-2. **Seed initial data**
-```bash
+# Order service creates tables automatically on first start.
+# Product service: seed sample products (optional)
 docker-compose exec product-service npm run seed
 ```
 
@@ -164,14 +170,15 @@ npm run lint
 ### Database Access
 
 ```bash
-# MySQL (User Service)
-docker-compose exec mysql mysql -u root -p
+# MySQL (User Service) - password: rootpassword
+docker-compose exec mysql mysql -u root -prootpassword users_db
 
 # PostgreSQL (Order Service)
-docker-compose exec postgres psql -U postgres -d orders
+docker-compose exec postgres psql -U postgres -d orders_db
 
 # MongoDB (Product Service)
 docker-compose exec mongodb mongosh
+# Then: use products_db; db.products.find()
 ```
 
 ### Redis CLI
@@ -192,9 +199,11 @@ Content-Type: application/json
 {
   "email": "user@example.com",
   "password": "Password123!",
-  "name": "John Doe"
+  "name": "John Doe",
+  "role": "customer"
 }
 ```
+Use `"role": "admin"` for the first admin user. Omit `role` for default `customer`.
 
 #### Login
 ```http
@@ -240,19 +249,36 @@ Content-Type: application/json
 {
   "items": [
     {
-      "productId": "12345",
-      "quantity": 2
+      "productId": "<product-_id>",
+      "name": "Product Name",
+      "quantity": 2,
+      "price": 99.99
     }
   ],
-  "paymentMethod": "credit_card"
+  "paymentMethod": "credit_card",
+  "shippingAddress": {
+    "street": "123 Main St",
+    "city": "Mumbai",
+    "state": "Maharashtra",
+    "zipCode": "400001",
+    "phone": "+91 9876543210"
+  }
 }
 ```
 
-#### Get User Orders
+#### Get Orders (user: own orders; admin: all orders)
 ```http
-GET /api/orders/user/:userId
+GET /api/orders?page=1&limit=10
 Authorization: Bearer <token>
 ```
+
+#### Order tracking & cancellation
+- `GET /api/orders/:id` - Order details  
+- `GET /api/orders/:id/tracking` - Tracking timeline  
+- `PUT /api/orders/:id/status` - Update status (admin)  
+- `POST /api/orders/:id/cancel-request` - Request cancellation  
+- `PUT /api/orders/:id/approve-cancel` / `reject-cancel` - Admin actions  
+All require `Authorization: Bearer <token>`.
 
 ### Analytics Endpoints
 
@@ -271,9 +297,10 @@ Authorization: Bearer <token>
 ## 🎨 Frontend Features
 
 - **Real-time Dashboard** - Live metrics and KPIs
-- **Order Management** - View and manage all orders
-- **Product Catalog** - CRUD operations for products
-- **User Management** - Admin panel for user control
+- **Order Management** - View and manage all orders; status updates, tracking, cancellation flow
+- **My Orders** - User-specific orders with delivery address and phone
+- **Product Catalog** - CRUD operations for products and categories
+- **User Management** - Admin panel for users and roles
 - **Analytics Charts** - Revenue trends, top products
 - **Responsive Design** - Mobile-friendly interface
 
@@ -419,7 +446,7 @@ This project is licensed under the MIT License.
 
 ## 👥 Authors
 
-- Your Name - Initial work
+- E-Commerce Analytics Platform contributors
 
 ## 🙏 Acknowledgments
 
@@ -431,8 +458,7 @@ This project is licensed under the MIT License.
 
 For issues and questions:
 - Open an issue on GitHub
-- Email: support@example.com
-- Documentation: [Wiki](https://github.com/your-repo/wiki)
+- See [QUICKSTART.md](./QUICKSTART.md) and [COMMANDS.md](./COMMANDS.md) for setup and troubleshooting
 
 ---
 

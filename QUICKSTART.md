@@ -181,13 +181,22 @@ curl -X POST http://localhost:8003/api/orders \
     "items": [
       {
         "productId": "PRODUCT_ID_FROM_STEP_3",
-        "quantity": 2
+        "name": "Product Name",
+        "quantity": 2,
+        "price": 1299.99
       }
     ],
     "paymentMethod": "credit_card",
-    "shippingAddress": "123 Main St, City, Country"
+    "shippingAddress": {
+      "street": "123 Main St",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "zipCode": "400001",
+      "phone": "+91 9876543210"
+    }
   }'
 ```
+Shipping address and phone are required; they appear on order details and in My Orders.
 
 ### 6. Get Analytics Dashboard
 
@@ -320,17 +329,15 @@ See [DEPLOYMENT.md](./docs/DEPLOYMENT.md) for AWS EC2 deployment instructions.
 
 ## 📚 Additional Documentation
 
-- [Architecture Overview](./docs/ARCHITECTURE.md)
-- [API Documentation](./docs/API.md)
-- [Database Schemas](./docs/SCHEMAS.md)
-- [CI/CD Pipeline](./docs/CICD.md)
-- [AWS Deployment Guide](./docs/DEPLOYMENT.md)
+- [README.md](./README.md) - Full project overview and API summary
+- [COMMANDS.md](./COMMANDS.md) - Command reference and testing workflow
+- [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) - AWS EC2, RDS, S3 deployment
 
 ## ❓ Need Help?
 
-- Check the [FAQ](./docs/FAQ.md)
 - Open an issue on GitHub
 - Review service logs: `docker-compose logs -f [service-name]`
+- See [COMMANDS.md](./COMMANDS.md) for troubleshooting
 
 ---
 

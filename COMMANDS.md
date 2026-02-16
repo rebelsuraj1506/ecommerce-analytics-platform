@@ -142,11 +142,19 @@ curl -X POST http://localhost:8003/api/orders \
     "items": [
       {
         "productId": "'$PRODUCT_ID'",
-        "quantity": 2
+        "name": "Product Name",
+        "quantity": 2,
+        "price": 99.99
       }
     ],
     "paymentMethod": "credit_card",
-    "shippingAddress": "123 Tech Street, Silicon Valley, CA 94000"
+    "shippingAddress": {
+      "street": "123 Tech Street",
+      "city": "Silicon Valley",
+      "state": "CA",
+      "zipCode": "94000",
+      "phone": "+1 555-123-4567"
+    }
   }'
 ```
 
@@ -336,11 +344,11 @@ PRODUCT_ID=$(curl -s -X POST http://localhost:8002/api/products \
 
 echo $PRODUCT_ID
 
-# 5. Create order
+# 5. Create order (use real product name/price from step 4)
 curl -X POST http://localhost:8003/api/orders \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"items\":[{\"productId\":\"$PRODUCT_ID\",\"quantity\":1}],\"paymentMethod\":\"credit_card\",\"shippingAddress\":\"Test Address\"}"
+  -d "{\"items\":[{\"productId\":\"$PRODUCT_ID\",\"name\":\"Test Product\",\"quantity\":1,\"price\":99.99}],\"paymentMethod\":\"credit_card\",\"shippingAddress\":{\"street\":\"1 Test St\",\"city\":\"City\",\"state\":\"ST\",\"zipCode\":\"12345\",\"phone\":\"+1234567890\"}}"
 
 # 6. Check analytics
 curl http://localhost:8004/api/analytics/dashboard \
@@ -386,7 +394,7 @@ docker-compose exec postgres pg_isready
 **Happy Coding! 🎉**
 
 For more details, see:
-- README.md - Complete documentation
-- QUICKSTART.md - Detailed setup guide
-- PROJECT_SUMMARY.md - What was built
-- docs/DEPLOYMENT.md - AWS deployment guide
+- [README.md](./README.md) - Complete documentation and API overview
+- [QUICKSTART.md](./QUICKSTART.md) - Detailed setup and env examples
+- [PROJECT_SUMMARY.md](./PROJECT_SUMMARY.md) - What was built
+- [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) - AWS deployment guide
