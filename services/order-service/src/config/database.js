@@ -59,6 +59,34 @@ const connectDB = async () => {
       )
     `);
 
+    // Add tracking and cancellation columns if they don't exist (for existing DBs)
+    const alterColumns = [
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS processing_at TIMESTAMP`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_at TIMESTAMP`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS out_for_delivery_at TIMESTAMP`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number VARCHAR(255)`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS courier_name VARCHAR(255)`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS estimated_delivery TIMESTAMP`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancellation_reason TEXT`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancellation_images JSONB DEFAULT '[]'`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancellation_requested_at TIMESTAMP`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancellation_approved_by INTEGER`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancellation_approved_at TIMESTAMP`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancellation_rejected BOOLEAN DEFAULT FALSE`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancellation_rejection_reason TEXT`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancellation_rejected_by INTEGER`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancellation_rejected_at TIMESTAMP`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_status VARCHAR(50)`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_amount DECIMAL(10, 2)`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_processing_at TIMESTAMP`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMP`
+    ];
+    for (const sql of alterColumns) {
+      await client.query(sql);
+    }
+
     // Create indexes
     await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)`);
