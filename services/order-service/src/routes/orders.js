@@ -105,7 +105,8 @@ router.get('/', [
         cancellation_approved_by, cancellation_approved_at,
         cancellation_rejected, cancellation_rejection_reason,
         cancellation_rejected_by, cancellation_rejected_at, cancelled_at,
-        refund_status, refund_amount, refund_processing_at, refunded_at
+        refund_status, refund_amount, refund_processing_at, refunded_at,
+        inventory_deducted, deleted_at, deleted_by, deletion_reason
       FROM orders
       ${whereClause}
       ORDER BY created_at DESC
@@ -113,14 +114,48 @@ router.get('/', [
     `;
     const ordersResult = await client.query(ordersQuery, [...params, limit, offset]);
 
-    // Get order items for each order
-    const orders = await Promise.all(ordersResult.rows.map(async (order) => {
+    // For customers: compute which orders have approved access to details
+    const orderIds = ordersResult.rows.map(o => o.id);
+    let approvedSet = new Set();
+    if (userRole !== 'admin' && orderIds.length > 0) {
+      const approvedRes = await client.query(
+        `SELECT DISTINCT order_id
+         FROM order_detail_requests
+         WHERE user_id = $1 AND status = 'approved' AND order_id = ANY($2::int[])`,
+        [userId, orderIds]
+      );
+      approvedSet = new Set(approvedRes.rows.map(r => r.order_id));
+    }
+
+    const visibleOrders = ordersResult.rows.filter((o) => {
+      if (userRole === 'admin') return true;
+      if (o.status === 'deleted') {
+        return approvedSet.has(o.id) || within30Days(o.deleted_at);
+      }
+      if (o.status === 'cancelled') {
+        return approvedSet.has(o.id) || within30Days(o.cancelled_at);
+      }
+      return true;
+    });
+
+    // Get order items for each order (hide details when not allowed)
+    const orders = await Promise.all(visibleOrders.map(async (order) => {
+      const canViewDetails = userRole === 'admin'
+        ? true
+        : (order.status === 'deleted'
+          ? approvedSet.has(order.id)
+          : (order.status === 'cancelled'
+            ? (within30Days(order.cancelled_at) || approvedSet.has(order.id))
+            : true
+          )
+        );
+
       const itemsQuery = `
         SELECT product_id, product_name, quantity, price, subtotal
         FROM order_items
         WHERE order_id = $1
       `;
-      const itemsResult = await client.query(itemsQuery, [order.id]);
+      const itemsResult = canViewDetails ? await client.query(itemsQuery, [order.id]) : { rows: [] };
       
       return {
         id: order.id,
@@ -128,7 +163,7 @@ router.get('/', [
         totalAmount: parseFloat(order.total_amount),
         status: order.status,
         paymentMethod: order.payment_method,
-        shippingAddress: parseShippingAddress(order.shipping_address),
+        shippingAddress: canViewDetails ? parseShippingAddress(order.shipping_address) : null,
         items: itemsResult.rows.map(item => ({
           productId: item.product_id,
           product_id: item.product_id,
@@ -148,12 +183,17 @@ router.get('/', [
         estimatedDelivery: order.estimated_delivery,
         // Cancellation info
         cancellationReason: order.cancellation_reason,
-        cancellationImages: order.cancellation_images || [],
+        cancellationImages: canViewDetails ? (order.cancellation_images || []) : [],
         cancellationRequestedAt: order.cancellation_requested_at,
         cancelledAt: order.cancelled_at,
         // Refund info
         refundStatus: order.refund_status,
-        refundAmount: order.refund_amount ? parseFloat(order.refund_amount) : null
+        refundAmount: order.refund_amount ? parseFloat(order.refund_amount) : null,
+        // Deletion / access info
+        deletedAt: order.deleted_at,
+        deletionReason: order.deletion_reason,
+        canViewDetails,
+        canRequestDetails: userRole !== 'admin' && (order.status === 'deleted' ? within30Days(order.deleted_at) : (order.status === 'cancelled' ? within30Days(order.cancelled_at) : false))
       };
     }));
 
@@ -395,6 +435,199 @@ router.post('/undo-sync-inventory', validateRequest, extractUser, async (req, re
   }
 });
 
+// ==================== ORDER DETAIL REQUESTS (30-day retention) ====================
+const DETAIL_REQUEST_REASONS = [
+  'Need invoice / billing proof',
+  'Warranty / service claim',
+  'Bank / payment dispute',
+  'Return / replacement reference',
+  'Tax / accounting',
+  'Other'
+];
+
+const DAYS_30_MS = 30 * 24 * 60 * 60 * 1000;
+
+function within30Days(ts) {
+  if (!ts) return false;
+  const t = new Date(ts).getTime();
+  if (Number.isNaN(t)) return false;
+  return (Date.now() - t) <= DAYS_30_MS;
+}
+
+// User: request order details (allowed within 30 days after cancellation or deletion)
+router.post('/:id/detail-request', [
+  param('id').isInt({ min: 1 }).withMessage('Invalid order ID'),
+  body('reason').isString().withMessage('Reason is required'),
+  body('otherReason').optional().isString().isLength({ max: 2000 })
+], validateRequest, extractUser, async (req, res) => {
+  const pool = getPool();
+  const client = await pool.connect();
+  try {
+    const orderId = req.params.id;
+    const userId = req.user.id;
+    const { reason, otherReason } = req.body;
+
+    const normalizedReason = (reason || '').trim();
+    const allowedReason = DETAIL_REQUEST_REASONS.includes(normalizedReason) ? normalizedReason : null;
+    if (!allowedReason) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid reason. Allowed: ${DETAIL_REQUEST_REASONS.join(', ')}`
+      });
+    }
+    if (allowedReason === 'Other' && !(otherReason || '').trim()) {
+      return res.status(400).json({ success: false, message: 'Please provide otherReason when reason is Other' });
+    }
+
+    const orderRes = await client.query(
+      `SELECT id, user_id, status, cancelled_at, deleted_at
+       FROM orders
+       WHERE id = $1 AND user_id = $2`,
+      [orderId, userId]
+    );
+    if (orderRes.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+    const order = orderRes.rows[0];
+    const baseTs = order.status === 'deleted' ? order.deleted_at : order.cancelled_at;
+    if (!baseTs) {
+      return res.status(400).json({
+        success: false,
+        message: 'Detail requests are only available for cancelled or deleted orders'
+      });
+    }
+    if (!within30Days(baseTs)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Detail request window expired (30 days)'
+      });
+    }
+
+    const existing = await client.query(
+      `SELECT id, status
+       FROM order_detail_requests
+       WHERE order_id = $1 AND user_id = $2
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [orderId, userId]
+    );
+    if (existing.rows.length > 0) {
+      const st = existing.rows[0].status;
+      if (st === 'pending') return res.status(400).json({ success: false, message: 'A request is already pending' });
+      if (st === 'approved') return res.status(400).json({ success: false, message: 'Request already approved. You can view details now.' });
+      // if rejected: allow a new request (still within 30 days)
+    }
+
+    const ins = await client.query(
+      `INSERT INTO order_detail_requests (order_id, user_id, reason, other_reason, status)
+       VALUES ($1, $2, $3, $4, 'pending')
+       RETURNING *`,
+      [orderId, userId, allowedReason, allowedReason === 'Other' ? otherReason.trim() : null]
+    );
+    res.status(201).json({ success: true, message: 'Request submitted', data: { request: ins.rows[0] } });
+  } catch (error) {
+    console.error('Error creating detail request:', error);
+    res.status(500).json({ success: false, message: 'Failed to create detail request', error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// User: get latest request status for an order
+router.get('/:id/detail-request', [
+  param('id').isInt({ min: 1 }).withMessage('Invalid order ID')
+], validateRequest, extractUser, async (req, res) => {
+  const pool = getPool();
+  const client = await pool.connect();
+  try {
+    const orderId = req.params.id;
+    const userId = req.user.id;
+
+    const orderRes = await client.query('SELECT id FROM orders WHERE id = $1 AND user_id = $2', [orderId, userId]);
+    if (orderRes.rows.length === 0) return res.status(404).json({ success: false, message: 'Order not found' });
+
+    const q = await client.query(
+      `SELECT id, reason, other_reason, status, admin_note, created_at, updated_at
+       FROM order_detail_requests
+       WHERE order_id = $1 AND user_id = $2
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [orderId, userId]
+    );
+    res.status(200).json({ success: true, data: { request: q.rows[0] || null } });
+  } catch (error) {
+    console.error('Error fetching detail request:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch detail request', error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Admin: list requests
+router.get('/detail-requests/list', [
+  query('status').optional().isIn(['pending', 'approved', 'rejected'])
+], validateRequest, extractUser, async (req, res) => {
+  const pool = getPool();
+  const client = await pool.connect();
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Only admins can view detail requests' });
+    }
+    const status = req.query.status;
+    const where = status ? 'WHERE r.status = $1' : 'WHERE 1=1';
+    const params = status ? [status] : [];
+    const result = await client.query(
+      `SELECT r.*, o.status AS order_status, o.cancelled_at, o.deleted_at
+       FROM order_detail_requests r
+       JOIN orders o ON o.id = r.order_id
+       ${where}
+       ORDER BY r.created_at DESC
+       LIMIT 200`,
+      params
+    );
+    res.status(200).json({ success: true, data: { requests: result.rows } });
+  } catch (error) {
+    console.error('Error listing detail requests:', error);
+    res.status(500).json({ success: false, message: 'Failed to list detail requests', error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Admin: approve / reject
+router.put('/detail-requests/:requestId/:action', [
+  param('requestId').isInt({ min: 1 }).withMessage('Invalid request ID'),
+  param('action').isIn(['approve', 'reject']).withMessage('Invalid action'),
+  body('adminNote').optional().isString().isLength({ max: 2000 })
+], validateRequest, extractUser, async (req, res) => {
+  const pool = getPool();
+  const client = await pool.connect();
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Only admins can update detail requests' });
+    }
+    const requestId = req.params.requestId;
+    const action = req.params.action;
+    const newStatus = action === 'approve' ? 'approved' : 'rejected';
+    const adminNote = (req.body.adminNote || '').trim() || null;
+
+    const upd = await client.query(
+      `UPDATE order_detail_requests
+       SET status = $1, admin_id = $2, admin_note = $3, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4
+       RETURNING *`,
+      [newStatus, req.user.id, adminNote, requestId]
+    );
+    if (upd.rows.length === 0) return res.status(404).json({ success: false, message: 'Request not found' });
+    res.status(200).json({ success: true, message: `Request ${newStatus}`, data: { request: upd.rows[0] } });
+  } catch (error) {
+    console.error('Error updating detail request:', error);
+    res.status(500).json({ success: false, message: 'Failed to update detail request', error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
 // ============= NEW ROUTES FOR ORDER TRACKING =============
 
 // Update order status (Admin only)
@@ -487,17 +720,24 @@ router.put('/:id/status', [
       });
     }
 
-    // When order is set to cancelled and was not already delivered/cancelled, restore inventory only if we had deducted it
+    // When order is set to cancelled and was not already delivered/cancelled, restore inventory only if we had deducted it.
+    // If we restore successfully, mark inventory_deducted=false to prevent double-restores (e.g. if order is later deleted).
     const orderRow = result.rows[0];
     const hadDeducted = orderRow.inventory_deducted === true;
     const shouldRestore = status === 'cancelled' && previousStatus && !['cancelled', 'delivered', 'refunded'].includes(previousStatus) && hadDeducted;
     if (shouldRestore) {
       const itemsRes = await client.query('SELECT product_id, quantity FROM order_items WHERE order_id = $1', [orderId]);
+      let restoreOk = true;
       for (const row of itemsRes.rows) {
         const adj = await adjustProductInventory(row.product_id, row.quantity);
         if (!adj.success) {
+          restoreOk = false;
           console.error(`Failed to restore inventory for product ${row.product_id}:`, adj.error);
         }
+      }
+      if (restoreOk) {
+        await client.query('UPDATE orders SET inventory_deducted = false WHERE id = $1', [orderId]);
+        orderRow.inventory_deducted = false;
       }
     }
 
@@ -505,7 +745,7 @@ router.put('/:id/status', [
       success: true,
       message: `Order status updated to ${status}`,
       data: {
-        order: withParsedShippingAddress(result.rows[0])
+        order: withParsedShippingAddress(orderRow)
       }
     });
   } catch (error) {
@@ -647,11 +887,17 @@ router.put('/:id/approve-cancel', [
     // Restore inventory only if we had deducted it (inventory_deducted = true)
     if (orderRow.inventory_deducted === true) {
       const itemsRes = await client.query('SELECT product_id, quantity FROM order_items WHERE order_id = $1', [orderId]);
+      let restoreOk = true;
       for (const row of itemsRes.rows) {
         const adj = await adjustProductInventory(row.product_id, row.quantity);
         if (!adj.success) {
+          restoreOk = false;
           console.error(`Failed to restore inventory for product ${row.product_id}:`, adj.error);
         }
+      }
+      if (restoreOk) {
+        await client.query('UPDATE orders SET inventory_deducted = false WHERE id = $1', [orderId]);
+        orderRow.inventory_deducted = false;
       }
     }
 
@@ -659,7 +905,7 @@ router.put('/:id/approve-cancel', [
       success: true,
       message: 'Cancellation approved successfully. Refund will be processed within 5-7 business days.',
       data: {
-        order: withParsedShippingAddress(result.rows[0])
+        order: withParsedShippingAddress(orderRow)
       }
     });
   } catch (error) {
@@ -914,6 +1160,38 @@ router.get('/:id', [
 
     const order = orderResult.rows[0];
 
+    // Enforce 30-day retention / approval rules for customers
+    if (userRole !== 'admin') {
+      const approvedRes = await client.query(
+        `SELECT 1
+         FROM order_detail_requests
+         WHERE order_id = $1 AND user_id = $2 AND status = 'approved'
+         LIMIT 1`,
+        [orderId, userId]
+      );
+      const approved = approvedRes.rows.length > 0;
+
+      if (order.status === 'deleted') {
+        if (!approved) {
+          return res.status(403).json({
+            success: false,
+            message: 'Order details are hidden after deletion. Submit a detail request within 30 days and wait for admin approval.',
+            data: { canRequestDetails: within30Days(order.deleted_at) }
+          });
+        }
+      }
+      if (order.status === 'cancelled') {
+        const ok = within30Days(order.cancelled_at) || approved;
+        if (!ok) {
+          return res.status(403).json({
+            success: false,
+            message: 'Order details retention expired (30 days).',
+            data: { canRequestDetails: within30Days(order.cancelled_at) }
+          });
+        }
+      }
+    }
+
     // Get order items
     const itemsQuery = `
       SELECT product_id, product_name, quantity, price, subtotal
@@ -944,9 +1222,10 @@ router.get('/:id', [
   }
 });
 
-// Delete order (Admin only)
+// Delete order (Admin only) - soft delete (keeps history for 30 days / request flow)
 router.delete('/:id', [
-  param('id').isInt().withMessage('Invalid order ID')
+  param('id').isInt().withMessage('Invalid order ID'),
+  body('reason').optional().isString().isLength({ max: 500 })
 ], validateRequest, extractUser, async (req, res) => {
   const pool = getPool();
   const client = await pool.connect();
@@ -960,28 +1239,62 @@ router.delete('/:id', [
     }
 
     const orderId = req.params.id;
-
     await client.query('BEGIN');
 
-    // Delete order items first
-    await client.query('DELETE FROM order_items WHERE order_id = $1', [orderId]);
-    
-    // Delete order
-    const result = await client.query('DELETE FROM orders WHERE id = $1 RETURNING id', [orderId]);
-
-    if (result.rows.length === 0) {
+    // Fetch order + items (needed to restore inventory and to soft-delete)
+    const orderRes = await client.query(
+      'SELECT id, status, inventory_deducted, deleted_at FROM orders WHERE id = $1',
+      [orderId]
+    );
+    if (orderRes.rows.length === 0) {
       await client.query('ROLLBACK');
-      return res.status(404).json({
-        success: false,
-        message: 'Order not found'
-      });
+      return res.status(404).json({ success: false, message: 'Order not found' });
     }
+    const order = orderRes.rows[0];
+    if (order.deleted_at) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: 'Order is already deleted' });
+    }
+
+    const itemsRes = await client.query('SELECT product_id, quantity FROM order_items WHERE order_id = $1', [orderId]);
+
+    // Restore inventory on delete if this order had deducted inventory and wasn't delivered/refunded.
+    // (Cancelled orders should already have inventory_deducted=false after restore.)
+    const shouldRestoreOnDelete = order.inventory_deducted === true && !['delivered', 'refunded'].includes(order.status);
+    if (shouldRestoreOnDelete) {
+      for (const item of itemsRes.rows) {
+        const adj = await adjustProductInventory(item.product_id, item.quantity);
+        if (!adj.success) {
+          await client.query('ROLLBACK');
+          return res.status(500).json({
+            success: false,
+            message: `Failed to restore inventory for product ${item.product_id}. Aborting delete.`,
+            error: adj.error
+          });
+        }
+      }
+    }
+
+    const deletionReason = req.body.reason || null;
+    const softDel = await client.query(
+      `UPDATE orders
+       SET status = 'deleted',
+           deleted_at = CURRENT_TIMESTAMP,
+           deleted_by = $1,
+           deletion_reason = $2,
+           inventory_deducted = CASE WHEN $3 THEN false ELSE inventory_deducted END,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $4
+       RETURNING *`,
+      [req.user.id, deletionReason, shouldRestoreOnDelete, orderId]
+    );
 
     await client.query('COMMIT');
 
     res.status(200).json({
       success: true,
-      message: 'Order deleted successfully'
+      message: 'Order deleted successfully',
+      data: { order: withParsedShippingAddress(softDel.rows[0]) }
     });
   } catch (error) {
     await client.query('ROLLBACK');

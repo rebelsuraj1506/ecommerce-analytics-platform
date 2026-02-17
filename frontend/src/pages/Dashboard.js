@@ -16,6 +16,25 @@ function Dashboard({ token, userRole }) {
     return isNaN(num) ? '0.00' : num.toFixed(2);
   };
 
+  const computeStatsFromOrders = (orders) => {
+    const totalOrders = orders.length;
+    const totalRevenue = orders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
+    const totalUnits = orders.reduce((sum, order) => {
+      return sum + (order.items || []).reduce((s, item) => s + (item.quantity || 0), 0);
+    }, 0);
+
+    const statuses = ['pending', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancel_requested', 'cancelled', 'refund_processing', 'refunded'];
+    const ordersByStatus = {};
+    const revenueByStatus = {};
+    statuses.forEach(s => {
+      const filtered = orders.filter(o => o.status === s);
+      ordersByStatus[s] = filtered.length;
+      revenueByStatus[s] = filtered.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+    });
+
+    return { totalOrders, totalRevenue, totalUnits, ordersByStatus, revenueByStatus, allOrders: orders };
+  };
+
   useEffect(() => {
     const fetchStats = async () => {
       try {
@@ -36,22 +55,7 @@ function Dashboard({ token, userRole }) {
         productList.forEach(p => { productMap[p._id] = p; });
         setProducts(productMap);
 
-        const totalOrders = orders.length;
-        const totalRevenue = orders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
-        const totalUnits = orders.reduce((sum, order) => {
-          return sum + (order.items || []).reduce((s, item) => s + (item.quantity || 0), 0);
-        }, 0);
-
-        const statuses = ['pending', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancel_requested', 'cancelled', 'refund_processing', 'refunded'];
-        const ordersByStatus = {};
-        const revenueByStatus = {};
-        statuses.forEach(s => {
-          const filtered = orders.filter(o => o.status === s);
-          ordersByStatus[s] = filtered.length;
-          revenueByStatus[s] = filtered.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
-        });
-
-        setStats({ totalOrders, totalRevenue, totalUnits, ordersByStatus, revenueByStatus, allOrders: orders });
+        setStats(computeStatsFromOrders(orders));
         setLoading(false);
       } catch (err) {
         console.error('Error fetching stats:', err);
@@ -70,7 +74,13 @@ function Dashboard({ token, userRole }) {
       const res = await fetch(`http://localhost:8003/api/orders/${orderId}`, {
         method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (res.ok) { alert('Order deleted!'); window.location.reload(); }
+      if (res.ok) {
+        alert('Order deleted!');
+        setStats(prev => computeStatsFromOrders(prev.allOrders.filter(o => o.id !== orderId)));
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert('Error: ' + (data.message || 'Failed to delete order'));
+      }
     } catch (err) { alert('Error: ' + err.message); }
   };
 

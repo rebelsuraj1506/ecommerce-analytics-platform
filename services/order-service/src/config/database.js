@@ -82,11 +82,35 @@ const connectDB = async () => {
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_amount DECIMAL(10, 2)`,
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS refund_processing_at TIMESTAMP`,
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMP`,
-      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS inventory_deducted BOOLEAN DEFAULT false`
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS inventory_deducted BOOLEAN DEFAULT false`,
+      // Soft-delete + retention / access-control for order details
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS deleted_by INTEGER`,
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS deletion_reason TEXT`
     ];
     for (const sql of alterColumns) {
       await client.query(sql);
     }
+
+    // Order detail requests (user requests details within 30 days; admin approves/rejects)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS order_detail_requests (
+        id SERIAL PRIMARY KEY,
+        order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL,
+        reason VARCHAR(255) NOT NULL,
+        other_reason TEXT,
+        status VARCHAR(20) DEFAULT 'pending', -- pending|approved|rejected
+        admin_id INTEGER,
+        admin_note TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_odr_order_id ON order_detail_requests(order_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_odr_user_id ON order_detail_requests(user_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_odr_status ON order_detail_requests(status)`);
 
     // Create indexes
     await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)`);

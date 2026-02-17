@@ -8,6 +8,11 @@ function MyOrders({ token, userId, userName }) {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [detailRequestModal, setDetailRequestModal] = useState(null); // { orderId }
+  const [detailReason, setDetailReason] = useState('');
+  const [detailOtherReason, setDetailOtherReason] = useState('');
+  const [detailSubmitting, setDetailSubmitting] = useState(false);
+  const [detailRequestInfo, setDetailRequestInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expandedTracking, setExpandedTracking] = useState(null);
@@ -44,6 +49,15 @@ function MyOrders({ token, userId, userName }) {
     'Shipping address is incorrect',
     'Payment method issue',
     'Other (Please specify)'
+  ];
+
+  const detailRequestReasons = [
+    'Need invoice / billing proof',
+    'Warranty / service claim',
+    'Bank / payment dispute',
+    'Return / replacement reference',
+    'Tax / accounting',
+    'Other'
   ];
 
   // Order status configurations
@@ -261,6 +275,45 @@ function MyOrders({ token, userId, userName }) {
       alert('Error: ' + err.message);
     } finally {
       setReviewSubmitting(false);
+    }
+  };
+
+  const openDetailRequest = async (orderId) => {
+    setDetailRequestModal({ orderId });
+    setDetailReason('');
+    setDetailOtherReason('');
+    setDetailRequestInfo(null);
+    try {
+      const res = await fetch(`http://localhost:8003/api/orders/${orderId}/detail-request`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok) setDetailRequestInfo(data.data?.request || null);
+    } catch (_) {}
+  };
+
+  const submitDetailRequest = async () => {
+    if (!detailRequestModal) return;
+    if (!detailReason) return alert('Please select a reason');
+    if (detailReason === 'Other' && !detailOtherReason.trim()) return alert('Please enter your reason');
+    setDetailSubmitting(true);
+    try {
+      const res = await fetch(`http://localhost:8003/api/orders/${detailRequestModal.orderId}/detail-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ reason: detailReason, otherReason: detailOtherReason })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert('✅ Request submitted. Admin will review it soon.');
+        setDetailRequestInfo(data.data?.request || null);
+      } else {
+        alert(data.message || 'Failed to submit request');
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setDetailSubmitting(false);
     }
   };
 
@@ -601,6 +654,28 @@ function MyOrders({ token, userId, userName }) {
                           <span>Cancel Order</span>
                         </button>
                       )}
+
+                      {!order.canViewDetails && order.canRequestDetails && (
+                        <button
+                          onClick={() => openDetailRequest(order.id)}
+                          style={{
+                            padding: '10px 20px',
+                            background: '#673ab7',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
+                          }}
+                        >
+                          <span>📄</span>
+                          <span>Request Order Details</span>
+                        </button>
+                      )}
                       
                       {order.status === 'delivered' && order.items?.length > 0 && (
                         <div style={{display: 'flex', flexDirection: 'column', gap: '8px', width: '100%'}}>
@@ -833,6 +908,54 @@ function MyOrders({ token, userId, userName }) {
                 <button type="button" onClick={handleSubmitReview} disabled={reviewSubmitting}
                   style={{padding: '10px 20px', background: '#ff9800', color: 'white', border: 'none', borderRadius: '4px', cursor: reviewSubmitting ? 'not-allowed' : 'pointer', fontWeight: '500'}}>
                   {reviewSubmitting ? 'Submitting...' : 'Submit Review'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Order Detail Request Modal */}
+        {detailRequestModal && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px'
+          }}>
+            <div style={{background: 'white', borderRadius: '8px', maxWidth: '520px', width: '100%', boxShadow: '0 10px 40px rgba(0,0,0,0.3)', padding: '24px'}}>
+              <h3 style={{margin: '0 0 8px 0', fontSize: '18px', color: '#212121'}}>📄 Request Order Details</h3>
+              <p style={{margin: '0 0 16px 0', fontSize: '13px', color: '#757575'}}>
+                Order #{detailRequestModal.orderId} • Requests are allowed within 30 days after cancellation/deletion and require admin approval.
+              </p>
+
+              {detailRequestInfo && (
+                <div style={{background: '#f1f3f6', padding: '12px', borderRadius: '6px', marginBottom: '16px', fontSize: '13px'}}>
+                  <div><strong>Latest request:</strong> {detailRequestInfo.status}</div>
+                  <div style={{marginTop: '4px'}}><strong>Reason:</strong> {detailRequestInfo.reason}{detailRequestInfo.other_reason ? ` — ${detailRequestInfo.other_reason}` : ''}</div>
+                  {detailRequestInfo.admin_note && <div style={{marginTop: '4px'}}><strong>Admin note:</strong> {detailRequestInfo.admin_note}</div>}
+                </div>
+              )}
+
+              <div style={{marginBottom: '14px'}}>
+                <label style={{display: 'block', fontSize: '14px', fontWeight: '500', marginBottom: '8px', color: '#212121'}}>Reason</label>
+                <select value={detailReason} onChange={(e) => setDetailReason(e.target.value)} style={{width: '100%', padding: '10px', border: '1px solid #e0e0e0', borderRadius: '4px'}}>
+                  <option value="">Select a reason</option>
+                  {detailRequestReasons.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+
+              {detailReason === 'Other' && (
+                <div style={{marginBottom: '16px'}}>
+                  <label style={{display: 'block', fontSize: '14px', fontWeight: '500', marginBottom: '8px', color: '#212121'}}>Your reason</label>
+                  <textarea value={detailOtherReason} onChange={(e) => setDetailOtherReason(e.target.value)} rows={3}
+                    style={{width: '100%', padding: '10px', border: '1px solid #e0e0e0', borderRadius: '4px', fontSize: '14px', boxSizing: 'border-box'}} />
+                </div>
+              )}
+
+              <div style={{display: 'flex', gap: '10px', justifyContent: 'flex-end'}}>
+                <button type="button" onClick={() => setDetailRequestModal(null)}
+                  style={{padding: '10px 18px', background: '#e0e0e0', color: '#212121', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '500'}}>Close</button>
+                <button type="button" onClick={submitDetailRequest} disabled={detailSubmitting}
+                  style={{padding: '10px 18px', background: '#673ab7', color: 'white', border: 'none', borderRadius: '4px', cursor: detailSubmitting ? 'not-allowed' : 'pointer', fontWeight: '600'}}>
+                  {detailSubmitting ? 'Submitting...' : 'Submit Request'}
                 </button>
               </div>
             </div>

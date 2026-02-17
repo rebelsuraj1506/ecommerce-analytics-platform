@@ -7,6 +7,10 @@ function AdminPanel({ token }) {
   const [products, setProducts] = useState({});
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('all');
+  const [selectedOrderIds, setSelectedOrderIds] = useState([]);
+  const [bulkDeletingOrders, setBulkDeletingOrders] = useState(false);
+  const [detailRequests, setDetailRequests] = useState([]);
+  const [detailRequestsLoading, setDetailRequestsLoading] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('recent');
@@ -61,6 +65,21 @@ function AdminPanel({ token }) {
         console.error('Failed to fetch orders:', err);
       }
 
+      // Fetch pending order detail requests (admin)
+      setDetailRequestsLoading(true);
+      try {
+        const reqRes = await fetch('http://localhost:8003/api/orders/detail-requests/list?status=pending', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const reqData = await reqRes.json();
+        setDetailRequests(reqData.data?.requests || []);
+      } catch (err) {
+        console.error('Failed to fetch detail requests:', err);
+        setDetailRequests([]);
+      } finally {
+        setDetailRequestsLoading(false);
+      }
+
       // Fetch products
       let productList = [];
       try {
@@ -86,6 +105,11 @@ function AdminPanel({ token }) {
   useEffect(() => {
     fetchData();
   }, [token]);
+
+  // Clear selection when switching filter/view
+  useEffect(() => {
+    setSelectedOrderIds([]);
+  }, [filterStatus, view]);
 
   // ========== ADD USER ==========
   const handleAddUser = async (e) => {
@@ -198,6 +222,83 @@ function AdminPanel({ token }) {
     }
   };
 
+  const updateDetailRequest = async (requestId, action) => {
+    const note = action === 'reject' ? prompt('Enter rejection note (optional):') : prompt('Enter approval note (optional):');
+    try {
+      const res = await fetch(`http://localhost:8003/api/orders/detail-requests/${requestId}/${action}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ adminNote: note || '' })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(`✅ Request ${action}d`);
+        await fetchData();
+      } else {
+        alert(data.message || 'Failed to update request');
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  };
+
+  // ========== DELETE ORDERS (SINGLE / BULK) ==========
+  const deleteOrders = async (orderIds) => {
+    const ids = Array.from(new Set(orderIds)).filter(Boolean);
+    if (ids.length === 0) return;
+
+    const confirmMsg = ids.length === 1
+      ? `Delete order #${ids[0]}? This cannot be undone.`
+      : `Delete ${ids.length} orders? This cannot be undone.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    setBulkDeletingOrders(true);
+    const succeeded = [];
+    const failed = [];
+
+    try {
+      const results = await Promise.allSettled(ids.map(async (id) => {
+        const res = await fetch(`http://localhost:8003/api/orders/${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.message || `Failed to delete order #${id}`);
+        }
+        return id;
+      }));
+
+      results.forEach((r, idx) => {
+        const id = ids[idx];
+        if (r.status === 'fulfilled') succeeded.push(id);
+        else failed.push({ id, error: r.reason?.message || String(r.reason) });
+      });
+
+      if (succeeded.length > 0) {
+        setAllOrders(prev => prev.filter(o => !succeeded.includes(o.id)));
+        setSelectedOrderIds(prev => prev.filter(id => !succeeded.includes(id)));
+      }
+
+      if (failed.length > 0) {
+        alert(
+          `Deleted: ${succeeded.length}\nFailed: ${failed.length}\n\n` +
+          failed.slice(0, 5).map(f => `#${f.id}: ${f.error}`).join('\n')
+        );
+      } else {
+        alert(ids.length === 1 ? '✅ Order deleted!' : `✅ ${succeeded.length} orders deleted!`);
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setBulkDeletingOrders(false);
+    }
+  };
+
+  const toggleOrderSelection = (orderId) => {
+    setSelectedOrderIds(prev => prev.includes(orderId) ? prev.filter(id => id !== orderId) : [...prev, orderId]);
+  };
+
   // ========== DELETE SINGLE USER ==========
   const deleteUser = async (userId, userName) => {
     const confirmation = window.prompt(
@@ -281,6 +382,7 @@ function AdminPanel({ token }) {
   };
 
   const filteredOrders = filterStatus === 'all' ? allOrders : allOrders.filter(o => o.status === filterStatus);
+  const allFilteredSelected = filteredOrders.length > 0 && filteredOrders.every(o => selectedOrderIds.includes(o.id));
 
   const filteredUsers = allUsers.filter(user => {
     if (!searchQuery) return true;
@@ -793,12 +895,93 @@ function AdminPanel({ token }) {
           <div style={{background: 'white', padding: '20px', borderRadius: '2px', boxShadow: '0 2px 4px rgba(0,0,0,0.08)'}}>
             <div style={{marginBottom: '20px'}}>
               <h3 style={{marginTop: 0}}>Order Management</h3>
-              <div style={{display: 'flex', gap: '10px', flexWrap: 'wrap'}}>
+
+              {/* Detail Requests (pending approvals) */}
+              <div style={{marginBottom: '15px', padding: '12px', border: '1px solid #e0e0e0', borderRadius: '6px', background: '#fafafa'}}>
+                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px'}}>
+                  <div style={{fontWeight: '600'}}>📄 Order Detail Requests</div>
+                  <div style={{fontSize: '12px', color: '#757575'}}>
+                    {detailRequestsLoading ? 'Loading...' : `${detailRequests.length} pending`}
+                  </div>
+                </div>
+                {detailRequests.length === 0 ? (
+                  <div style={{fontSize: '13px', color: '#757575', marginTop: '8px'}}>No pending requests.</div>
+                ) : (
+                  <div style={{marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px'}}>
+                    {detailRequests.slice(0, 10).map(r => (
+                      <div key={r.id} style={{display: 'flex', justifyContent: 'space-between', gap: '10px', padding: '10px', background: 'white', borderRadius: '6px', border: '1px solid #f0f0f0'}}>
+                        <div style={{flex: 1}}>
+                          <div style={{fontSize: '12px', color: '#757575'}}>
+                            Request #{r.id} • Order #{r.order_id} • User #{r.user_id} • {new Date(r.created_at).toLocaleString()}
+                          </div>
+                          <div style={{fontSize: '13px', marginTop: '4px'}}>
+                            <strong>Reason:</strong> {r.reason}{r.other_reason ? ` — ${r.other_reason}` : ''}
+                          </div>
+                          <div style={{fontSize: '12px', color: '#757575', marginTop: '4px'}}>
+                            Order status: <strong>{(r.order_status || '').replace('_',' ')}</strong>
+                          </div>
+                        </div>
+                        <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
+                          <button onClick={() => updateDetailRequest(r.id, 'approve')} style={{padding: '8px 12px', background: '#388e3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: '600'}}>
+                            ✅ Approve
+                          </button>
+                          <button onClick={() => updateDetailRequest(r.id, 'reject')} style={{padding: '8px 12px', background: '#f44336', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: '600'}}>
+                            ❌ Reject
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {detailRequests.length > 10 && (
+                      <div style={{fontSize: '12px', color: '#757575'}}>Showing 10 of {detailRequests.length} pending requests.</div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div style={{display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center'}}>
                 {['all', 'pending', 'processing', 'shipped', 'delivered', 'cancel_requested', 'cancelled', 'refunded'].map(status => (
                   <button key={status} onClick={() => setFilterStatus(status)} style={{padding: '8px 16px', background: filterStatus === status ? '#2874f0' : 'white', color: filterStatus === status ? 'white' : '#212121', border: '1px solid #e0e0e0', borderRadius: '2px', cursor: 'pointer', fontSize: '13px', textTransform: 'capitalize'}}>
                     {status.replace('_', ' ')} ({status === 'all' ? allOrders.length : allOrders.filter(o => o.status === status).length})
                   </button>
                 ))}
+              </div>
+
+              {/* Bulk actions */}
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginTop: '15px'}}>
+                <label style={{display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#212121'}}>
+                  <input
+                    type="checkbox"
+                    checked={allFilteredSelected}
+                    onChange={() => setSelectedOrderIds(allFilteredSelected ? [] : filteredOrders.map(o => o.id))}
+                  />
+                  Select all in this view ({filteredOrders.length})
+                </label>
+                <div style={{display: 'flex', gap: '10px'}}>
+                  <button
+                    onClick={() => deleteOrders(selectedOrderIds)}
+                    disabled={selectedOrderIds.length === 0 || bulkDeletingOrders}
+                    style={{
+                      padding: '8px 14px',
+                      background: selectedOrderIds.length === 0 ? '#e0e0e0' : '#f44336',
+                      color: selectedOrderIds.length === 0 ? '#9e9e9e' : 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: selectedOrderIds.length === 0 || bulkDeletingOrders ? 'not-allowed' : 'pointer',
+                      fontSize: '13px',
+                      fontWeight: '600'
+                    }}
+                  >
+                    {bulkDeletingOrders ? 'Deleting...' : `🗑️ Delete Selected (${selectedOrderIds.length})`}
+                  </button>
+                  {selectedOrderIds.length > 0 && (
+                    <button
+                      onClick={() => setSelectedOrderIds([])}
+                      style={{padding: '8px 14px', background: 'white', color: '#212121', border: '1px solid #e0e0e0', borderRadius: '4px', cursor: 'pointer', fontSize: '13px'}}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -813,7 +996,14 @@ function AdminPanel({ token }) {
 
                   return (
                     <div key={order.id} style={{border: '1px solid #e0e0e0', borderRadius: '4px', padding: '15px', background: order.status === 'cancel_requested' ? '#fff9e6' : 'white'}}>
-                      <div style={{display: 'flex', gap: '15px', justifyContent: 'space-between'}}>
+                      <div style={{display: 'flex', gap: '15px', justifyContent: 'space-between', alignItems: 'flex-start'}}>
+                        <div style={{paddingTop: '3px'}}>
+                          <input
+                            type="checkbox"
+                            checked={selectedOrderIds.includes(order.id)}
+                            onChange={() => toggleOrderSelection(order.id)}
+                          />
+                        </div>
                         <div style={{flex: 1}}>
                           <div style={{fontSize: '12px', color: '#757575', marginBottom: '5px'}}>
                             Order #{order.id} • User: <strong>{orderUser?.name || 'Unknown'}</strong> ({orderUser?.email || ''}) • {new Date(order.createdAt).toLocaleString()}
@@ -864,6 +1054,14 @@ function AdminPanel({ token }) {
                         <div style={{textAlign: 'right'}}>
                           <div style={{padding: '4px 12px', borderRadius: '2px', fontSize: '11px', fontWeight: '500', color: 'white', background: order.status === 'delivered' ? '#388e3c' : order.status === 'cancel_requested' ? '#ff9800' : '#2874f0', textTransform: 'capitalize', display: 'inline-block', marginBottom: '10px'}}>
                             {order.status.replace('_', ' ')}
+                          </div>
+                          <div>
+                            <button
+                              onClick={() => deleteOrders([order.id])}
+                              style={{padding: '6px 10px', background: '#f44336', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: '600'}}
+                            >
+                              🗑️ Delete
+                            </button>
                           </div>
                         </div>
                       </div>
