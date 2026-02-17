@@ -81,14 +81,14 @@ function MyOrders({ token, userId, userName }) {
       color: '#2874f0',
       icon: '🚚',
       description: 'Your order has been shipped and is on the way',
-      canCancel: false
+      canCancel: true
     },
     out_for_delivery: {
       label: 'Out for Delivery',
       color: '#ff9800',
       icon: '🚛',
       description: 'Your order is out for delivery',
-      canCancel: false
+      canCancel: true
     },
     delivered: {
       label: 'Delivered',
@@ -474,7 +474,13 @@ function MyOrders({ token, userId, userName }) {
               const product = firstItem ? products[firstItem.product_id || firstItem.productId] : null;
               const statusInfo = getStatusInfo(order.status);
               const timeline = getTrackingTimeline(order);
-              const canCancel = statusInfo.canCancel && !['cancelled', 'delivered', 'refunded'].includes(order.status);
+              const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+              const isWithin7DaysDelivered = order.status === 'delivered' && order.deliveredAt &&
+                (Date.now() - new Date(order.deliveredAt).getTime()) <= SEVEN_DAYS_MS;
+              const daysLeftToCancel = isWithin7DaysDelivered
+                ? Math.ceil((SEVEN_DAYS_MS - (Date.now() - new Date(order.deliveredAt).getTime())) / (24 * 60 * 60 * 1000))
+                : 0;
+              const canCancel = (statusInfo.canCancel && !['cancelled', 'delivered', 'refunded'].includes(order.status)) || isWithin7DaysDelivered;
 
               return (
                 <div key={order.id} style={{
@@ -651,7 +657,14 @@ function MyOrders({ token, userId, userName }) {
                           }}
                         >
                           <span>❌</span>
-                          <span>Cancel Order</span>
+                          <span>
+                            Cancel Order
+                            {isWithin7DaysDelivered && (
+                              <span style={{fontSize: '11px', opacity: 0.85, marginLeft: '6px'}}>
+                                ({daysLeftToCancel}d left)
+                              </span>
+                            )}
+                          </span>
                         </button>
                       )}
 
@@ -1125,7 +1138,8 @@ function MyOrders({ token, userId, userName }) {
                     • Your cancellation request will be reviewed within 24-48 hours<br/>
                     • If approved, refund will be initiated immediately<br/>
                     • Amount will be credited to your original payment method within 5-7 business days<br/>
-                    • You'll receive email notifications at each step
+                    • You'll receive email notifications at each step<br/>
+                    • Delivered orders can be cancelled within 7 days of delivery
                   </div>
                 </div>
               </div>

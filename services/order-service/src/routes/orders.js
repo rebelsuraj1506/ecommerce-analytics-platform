@@ -446,12 +446,20 @@ const DETAIL_REQUEST_REASONS = [
 ];
 
 const DAYS_30_MS = 30 * 24 * 60 * 60 * 1000;
+const DAYS_7_MS = 7 * 24 * 60 * 60 * 1000;
 
 function within30Days(ts) {
   if (!ts) return false;
   const t = new Date(ts).getTime();
   if (Number.isNaN(t)) return false;
   return (Date.now() - t) <= DAYS_30_MS;
+}
+
+function within7DaysOfDelivery(ts) {
+  if (!ts) return false;
+  const t = new Date(ts).getTime();
+  if (Number.isNaN(t)) return false;
+  return (Date.now() - t) <= DAYS_7_MS;
 }
 
 // User: request order details (allowed within 30 days after cancellation or deletion)
@@ -686,6 +694,11 @@ router.put('/:id/status', [
         break;
       case 'cancelled':
         updateFields.push(`cancelled_at = CURRENT_TIMESTAMP`);
+        if (req.body.cancellationReason) {
+          updateFields.push(`cancellation_reason = $${paramIndex}`);
+          params.push(req.body.cancellationReason);
+          paramIndex++;
+        }
         break;
       case 'refund_processing':
         updateFields.push(`refund_processing_at = CURRENT_TIMESTAMP`);
@@ -775,7 +788,7 @@ router.post('/:id/cancel-request', [
 
     // Check if order exists and belongs to user
     const checkQuery = `
-      SELECT id, user_id, status 
+      SELECT id, user_id, status, delivered_at
       FROM orders 
       WHERE id = $1 AND (user_id = $2 OR $3 = 'admin')
     `;
@@ -790,11 +803,22 @@ router.post('/:id/cancel-request', [
 
     const order = checkResult.rows[0];
 
-    // Check if order can be cancelled
-    if (!['pending', 'processing'].includes(order.status)) {
+    // Check if order can be cancelled:
+    // - pending / processing: always allowed
+    // - delivered: allowed within 7 days of delivery
+    const isPreDeliveryCancel = ['pending', 'processing'].includes(order.status);
+    const isPostDeliveryCancel = order.status === 'delivered' && within7DaysOfDelivery(order.delivered_at);
+
+    if (!isPreDeliveryCancel && !isPostDeliveryCancel) {
+      if (order.status === 'delivered') {
+        return res.status(400).json({
+          success: false,
+          message: 'The 7-day post-delivery cancellation window has expired. Orders can only be cancelled within 7 days of delivery.'
+        });
+      }
       return res.status(400).json({
         success: false,
-        message: `Cannot cancel order with status: ${order.status}. Orders can only be cancelled when pending or processing.`
+        message: `Cannot cancel order with status: ${order.status}. Orders can be cancelled when pending, processing, or within 7 days of delivery.`
       });
     }
 

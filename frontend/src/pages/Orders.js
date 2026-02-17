@@ -7,6 +7,8 @@ function Orders({ token, userRole }) {
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [cancelModal, setCancelModal] = useState(null); // { order, pendingStatus }
+  const [cancelReason, setCancelReason] = useState('');
   const [trackingDetails, setTrackingDetails] = useState({
     trackingNumber: '',
     courierName: '',
@@ -45,13 +47,13 @@ function Orders({ token, userRole }) {
       label: 'Shipped', 
       color: '#2874f0', 
       icon: '🚚',
-      nextStates: ['out_for_delivery']
+      nextStates: ['out_for_delivery', 'cancelled']
     },
     out_for_delivery: { 
       label: 'Out for Delivery', 
       color: '#ff9800', 
       icon: '🚛',
-      nextStates: ['delivered']
+      nextStates: ['delivered', 'cancelled']
     },
     delivered: { 
       label: 'Delivered', 
@@ -165,11 +167,28 @@ function Orders({ token, userRole }) {
       return;
     }
 
+    // Admin cancellation requires a mandatory reason
+    if (newStatus === 'cancelled') {
+      setCancelModal({ order, pendingStatus: newStatus });
+      setCancelReason('');
+      return;
+    }
+
     // Confirm status change
     const confirmMessage = `Update order #${order.id} status to "${orderStatuses[newStatus]?.label}"?`;
     if (window.confirm(confirmMessage)) {
       updateOrderStatus(order.id, newStatus);
     }
+  };
+
+  const handleCancelSubmit = () => {
+    if (!cancelReason.trim()) {
+      alert('A cancellation reason is required.');
+      return;
+    }
+    updateOrderStatus(cancelModal.order.id, 'cancelled', { cancellationReason: cancelReason.trim() });
+    setCancelModal(null);
+    setCancelReason('');
   };
 
   const handleShippingSubmit = () => {
@@ -491,13 +510,13 @@ function Orders({ token, userRole }) {
                       {/* Admin Actions */}
                       {canUpdateStatus && (
                         <div>
-                          <div style={{fontSize: '13px', fontWeight: '500', marginBottom: '10px', color: '#212121'}}>
-                            Update Order Status:
-                          </div>
-                          <div style={{display: 'flex', gap: '8px', flexWrap: 'wrap'}}>
-                            {/* Cancel Request Actions */}
-                            {order.status === 'cancel_requested' && (
-                              <>
+                          {/* Cancel Request Actions */}
+                          {order.status === 'cancel_requested' && (
+                            <div>
+                              <div style={{fontSize: '13px', fontWeight: '600', marginBottom: '10px', color: '#e65100'}}>
+                                ⚠️ Cancellation Request Pending
+                              </div>
+                              <div style={{display: 'flex', gap: '8px', flexWrap: 'wrap'}}>
                                 <button 
                                   onClick={() => handleCancellationAction(order.id, 'approve')}
                                   style={{
@@ -528,33 +547,37 @@ function Orders({ token, userRole }) {
                                 >
                                   ❌ Reject Request
                                 </button>
-                              </>
-                            )}
+                              </div>
+                            </div>
+                          )}
 
-                            {/* Regular Status Updates */}
-                            {statusInfo?.nextStates?.map(nextStatus => (
-                              <button 
-                                key={nextStatus}
-                                onClick={() => handleStatusUpdate(order, nextStatus)}
-                                style={{
-                                  padding: '8px 16px',
-                                  background: orderStatuses[nextStatus]?.color || '#2874f0',
-                                  color: 'white',
-                                  border: 'none',
-                                  borderRadius: '4px',
-                                  cursor: 'pointer',
-                                  fontSize: '13px',
-                                  fontWeight: '500',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '5px'
-                                }}
-                              >
-                                <span>{orderStatuses[nextStatus]?.icon}</span>
-                                <span>Mark as {orderStatuses[nextStatus]?.label}</span>
-                              </button>
-                            ))}
-                          </div>
+                          {/* Regular Status Updates — only show when there are next states */}
+                          {order.status !== 'cancel_requested' && statusInfo?.nextStates?.length > 0 && (
+                            <div style={{display: 'flex', gap: '8px', flexWrap: 'wrap'}}>
+                              {statusInfo.nextStates.map(nextStatus => (
+                                <button 
+                                  key={nextStatus}
+                                  onClick={() => handleStatusUpdate(order, nextStatus)}
+                                  style={{
+                                    padding: '8px 16px',
+                                    background: nextStatus === 'cancelled' ? '#f44336' : (orderStatuses[nextStatus]?.color || '#2874f0'),
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontSize: '13px',
+                                    fontWeight: '500',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '5px'
+                                  }}
+                                >
+                                  <span>{orderStatuses[nextStatus]?.icon}</span>
+                                  <span>Mark as {orderStatuses[nextStatus]?.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -564,6 +587,51 @@ function Orders({ token, userRole }) {
             </div>
           )}
         </div>
+
+        {/* Admin Cancel Reason Modal */}
+        {cancelModal && (
+          <div className="modal-overlay">
+            <div className="modal" style={{maxWidth: '480px'}}>
+              <div className="modal-header" style={{background: 'linear-gradient(135deg, #f44336 0%, #c62828 100%)', borderRadius: 'var(--radius-md) var(--radius-md) 0 0'}}>
+                <div>
+                  <h3 className="modal-title" style={{color: '#fff'}}>❌ Cancel Order #{cancelModal.order.id}</h3>
+                  <div style={{fontSize: '0.78rem', color: 'rgba(255,255,255,0.8)', marginTop: 2}}>
+                    This reason will be shown to the customer
+                  </div>
+                </div>
+                <button className="modal-close" style={{background: 'rgba(255,255,255,0.15)', color: '#fff'}} onClick={() => { setCancelModal(null); setCancelReason(''); }}>✕</button>
+              </div>
+              <div className="modal-body">
+                <div className="form-group">
+                  <label className="form-label">
+                    Cancellation Reason <span style={{color: 'var(--brand-danger)'}}>*</span>
+                  </label>
+                  <textarea
+                    className="form-control"
+                    rows={4}
+                    value={cancelReason}
+                    onChange={(e) => setCancelReason(e.target.value)}
+                    placeholder="e.g. Item is out of stock, fraudulent order detected, payment verification failed..."
+                    style={{resize: 'vertical'}}
+                  />
+                  <div style={{fontSize: '12px', color: '#757575', marginTop: '6px'}}>
+                    ℹ️ The customer will see this reason in their order history so they understand why the order was cancelled.
+                  </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-ghost" onClick={() => { setCancelModal(null); setCancelReason(''); }}>Back</button>
+                <button
+                  className="btn"
+                  style={{background: '#f44336', color: 'white'}}
+                  onClick={handleCancelSubmit}
+                >
+                  Confirm Cancellation
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Shipping Modal */}
         {selectedOrder && selectedOrder.pendingStatus === 'shipped' && (
