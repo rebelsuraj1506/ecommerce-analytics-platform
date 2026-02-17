@@ -10,28 +10,20 @@ function Dashboard({ token, userRole }) {
   const [viewMode, setViewMode] = useState('summary');
 
   const isAdmin = userRole === 'admin';
+  const fmt = (v) => { const n = parseFloat(v); return isNaN(n) ? '0.00' : n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+  const fmtInt = (v) => Number(v).toLocaleString('en-IN');
 
-  const formatPrice = (value) => {
-    const num = parseFloat(value);
-    return isNaN(num) ? '0.00' : num.toFixed(2);
-  };
-
-  const computeStatsFromOrders = (orders) => {
+  const computeStats = (orders) => {
     const totalOrders = orders.length;
-    const totalRevenue = orders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
-    const totalUnits = orders.reduce((sum, order) => {
-      return sum + (order.items || []).reduce((s, item) => s + (item.quantity || 0), 0);
-    }, 0);
-
-    const statuses = ['pending', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancel_requested', 'cancelled', 'refund_processing', 'refunded'];
-    const ordersByStatus = {};
-    const revenueByStatus = {};
+    const totalRevenue = orders.reduce((s, o) => s + (o.totalAmount || 0), 0);
+    const totalUnits = orders.reduce((s, o) => s + (o.items || []).reduce((ss, i) => ss + (i.quantity || 0), 0), 0);
+    const statuses = ['pending','processing','shipped','out_for_delivery','delivered','cancel_requested','cancelled','refund_processing','refunded'];
+    const ordersByStatus = {}, revenueByStatus = {};
     statuses.forEach(s => {
-      const filtered = orders.filter(o => o.status === s);
-      ordersByStatus[s] = filtered.length;
-      revenueByStatus[s] = filtered.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+      const f = orders.filter(o => o.status === s);
+      ordersByStatus[s] = f.length;
+      revenueByStatus[s] = f.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
     });
-
     return { totalOrders, totalRevenue, totalUnits, ordersByStatus, revenueByStatus, allOrders: orders };
   };
 
@@ -39,152 +31,192 @@ function Dashboard({ token, userRole }) {
     const fetchStats = async () => {
       try {
         const [ordersRes, productsRes] = await Promise.all([
-          fetch('http://localhost:8003/api/orders', {
-            headers: { 'Authorization': `Bearer ${token}` }
-          }),
+          fetch('http://localhost:8003/api/orders', { headers: { Authorization: `Bearer ${token}` } }),
           fetch('http://localhost:8002/api/products?limit=100')
         ]);
-
         const ordersData = await ordersRes.json();
         const productsData = await productsRes.json();
-        
         const orders = ordersData.data?.orders || [];
         const productList = productsData.data?.products || [];
-        
         const productMap = {};
         productList.forEach(p => { productMap[p._id] = p; });
         setProducts(productMap);
-
-        setStats(computeStatsFromOrders(orders));
-        setLoading(false);
-      } catch (err) {
-        console.error('Error fetching stats:', err);
-        setLoading(false);
-      }
+        setStats(computeStats(orders));
+      } catch (err) { console.error(err); }
+      finally { setLoading(false); }
     };
-
     fetchStats();
-    const interval = setInterval(fetchStats, 15000);
-    return () => clearInterval(interval);
+    const iv = setInterval(fetchStats, 15000);
+    return () => clearInterval(iv);
   }, [token]);
 
   const deleteOrder = async (orderId) => {
     if (!window.confirm('Delete this order?')) return;
     try {
       const res = await fetch(`http://localhost:8003/api/orders/${orderId}`, {
-        method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }
+        method: 'DELETE', headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
-        alert('Order deleted!');
-        setStats(prev => computeStatsFromOrders(prev.allOrders.filter(o => o.id !== orderId)));
-      } else {
-        const data = await res.json().catch(() => ({}));
-        alert('Error: ' + (data.message || 'Failed to delete order'));
+        setStats(prev => computeStats(prev.allOrders.filter(o => o.id !== orderId)));
       }
     } catch (err) { alert('Error: ' + err.message); }
   };
 
-  if (loading) return <div style={{textAlign: 'center', padding: '40px'}}>Loading dashboard...</div>;
+  const statusConfig = [
+    { key: 'pending',         label: 'Placed',          icon: '📋', color: '#ff9800', bg: '#fff8e1' },
+    { key: 'processing',      label: 'Processing',       icon: '⚙️',  color: '#1565c0', bg: '#e3f2fd' },
+    { key: 'shipped',         label: 'Shipped',          icon: '🚚', color: '#4527a0', bg: '#ede7f6' },
+    { key: 'out_for_delivery',label: 'Out for Delivery', icon: '🚛', color: '#bf360c', bg: '#fff3e0' },
+    { key: 'delivered',       label: 'Delivered',        icon: '✅', color: '#1b5e20', bg: '#e8f5e9' },
+    { key: 'cancelled',       label: 'Cancelled',        icon: '❌', color: '#b71c1c', bg: '#fde8e8' },
+  ];
 
-  const filteredOrders = viewMode === 'summary' ? stats.allOrders : stats.allOrders.filter(o => o.status === viewMode);
+  const getBadgeClass = (status) => {
+    const map = { pending: 'badge-pending', processing: 'badge-processing', shipped: 'badge-shipped', out_for_delivery: 'badge-out_for_delivery', delivered: 'badge-delivered', cancelled: 'badge-cancelled', cancel_requested: 'badge-cancel_requested', refund_processing: 'badge-refund_processing', refunded: 'badge-refunded' };
+    return `badge ${map[status] || 'badge-pending'}`;
+  };
 
-  const StatusCard = ({ title, count, revenue, color, icon, status }) => (
-    <div onClick={() => setViewMode(status)} style={{
-      background: `linear-gradient(135deg, ${color}dd 0%, ${color} 100%)`,
-      color: 'white', padding: '20px', borderRadius: '8px', cursor: 'pointer',
-      transition: 'transform 0.2s', border: viewMode === status ? '3px solid white' : 'none'
-    }}
-    onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-3px)'}
-    onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}>
-      <div style={{fontSize: '0.85em', opacity: 0.9, marginBottom: '5px'}}>{icon} {title}</div>
-      <div style={{fontSize: '2em', fontWeight: 'bold'}}>{count}</div>
-      {isAdmin && <div style={{fontSize: '1em', opacity: 0.95, marginTop: '5px', fontWeight: '600'}}>₹{formatPrice(revenue)}</div>}
+  if (loading) return (
+    <div className="page-wrap">
+      <div className="spinner-wrap">
+        <div className="spinner" />
+        <span style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>Loading dashboard…</span>
+      </div>
     </div>
   );
 
-  return (
-    <div style={{background: '#f1f3f6', minHeight: '100vh', padding: '20px'}}>
-      <div style={{maxWidth: '1400px', margin: '0 auto'}}>
-        {/* Header */}
-        <div style={{background: 'white', padding: '20px 30px', borderRadius: '2px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.08)'}}>
-          <h2 style={{margin: 0, color: '#212121', fontSize: '24px', fontWeight: '500'}}>
-            {isAdmin ? '📊 Analytics Dashboard' : '📊 My Dashboard'}
-          </h2>
-        </div>
+  const filteredOrders = viewMode === 'summary' ? stats.allOrders : stats.allOrders.filter(o => o.status === viewMode);
 
-        {/* Summary Cards */}
-        <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '15px', marginBottom: '20px'}}>
-          <div style={{background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', padding: '25px', borderRadius: '8px'}}>
-            <div style={{fontSize: '0.9em', opacity: 0.9}}>{isAdmin ? 'Total Orders' : 'My Orders'}</div>
-            <div style={{fontSize: '2.5em', fontWeight: 'bold', marginTop: '10px'}}>{stats.totalOrders}</div>
+  return (
+    <div className="page-wrap">
+      {/* Header */}
+      <div className="page-header">
+        <div className="page-title-row">
+          <span style={{ fontSize: '1.4rem' }}>📊</span>
+          <h1 className="page-title">{isAdmin ? 'Analytics Dashboard' : 'My Dashboard'}</h1>
+        </div>
+        <span style={{ fontSize: '0.78rem', color: 'var(--gray-400)' }}>
+          Auto-refreshes every 15s
+        </span>
+      </div>
+
+      <div className="page-body">
+        {/* KPI Cards */}
+        <div className="stat-grid mb-20">
+          <div className="stat-card c-primary">
+            <div className="stat-icon">🛒</div>
+            <div className="stat-label">{isAdmin ? 'Total Orders' : 'My Orders'}</div>
+            <div className="stat-value">{fmtInt(stats.totalOrders)}</div>
+            <div className="stat-sub">All time</div>
           </div>
-          <div style={{background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', color: 'white', padding: '25px', borderRadius: '8px'}}>
-            <div style={{fontSize: '0.9em', opacity: 0.9}}>{isAdmin ? 'Total Revenue' : 'Total Spent'}</div>
-            <div style={{fontSize: '2.5em', fontWeight: 'bold', marginTop: '10px'}}>₹{formatPrice(stats.totalRevenue)}</div>
+          <div className="stat-card c-accent">
+            <div className="stat-icon">₹</div>
+            <div className="stat-label">{isAdmin ? 'Total Revenue' : 'Total Spent'}</div>
+            <div className="stat-value" style={{ fontSize: stats.totalRevenue > 99999 ? '1.4rem' : '1.85rem' }}>₹{fmt(stats.totalRevenue)}</div>
+            <div className="stat-sub">Cumulative</div>
           </div>
-          <div style={{background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', color: 'white', padding: '25px', borderRadius: '8px'}}>
-            <div style={{fontSize: '0.9em', opacity: 0.9}}>Items {isAdmin ? 'Sold' : 'Purchased'}</div>
-            <div style={{fontSize: '2.5em', fontWeight: 'bold', marginTop: '10px'}}>{stats.totalUnits}</div>
+          <div className="stat-card c-success">
+            <div className="stat-icon">📦</div>
+            <div className="stat-label">Items {isAdmin ? 'Sold' : 'Purchased'}</div>
+            <div className="stat-value">{fmtInt(stats.totalUnits)}</div>
+            <div className="stat-sub">Units</div>
           </div>
+          {isAdmin && (
+            <div className="stat-card c-warning">
+              <div className="stat-icon">✅</div>
+              <div className="stat-label">Delivered</div>
+              <div className="stat-value">{fmtInt(stats.ordersByStatus.delivered || 0)}</div>
+              <div className="stat-sub">of {fmtInt(stats.totalOrders)} orders</div>
+            </div>
+          )}
         </div>
 
         {/* Status Cards */}
-        <div style={{marginBottom: '20px'}}>
-          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
-            <h3 style={{margin: 0, color: '#333'}}>Order Status</h3>
-            <button onClick={() => setViewMode('summary')} style={{padding: '8px 16px', background: viewMode === 'summary' ? '#2874f0' : '#757575', color: 'white', border: 'none', borderRadius: '2px', cursor: 'pointer', fontSize: '13px'}}>
+        <div className="card mb-20">
+          <div className="card-header">
+            <span className="card-title">Order Status Breakdown</span>
+            <button
+              className={`filter-tab${viewMode === 'summary' ? ' active' : ''}`}
+              onClick={() => setViewMode('summary')}
+            >
               View All
             </button>
           </div>
-          <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px'}}>
-            <StatusCard title="Placed" count={stats.ordersByStatus.pending || 0} revenue={stats.revenueByStatus.pending || 0} color="#ffc107" icon="📋" status="pending" />
-            <StatusCard title="Processing" count={stats.ordersByStatus.processing || 0} revenue={stats.revenueByStatus.processing || 0} color="#17a2b8" icon="⚙️" status="processing" />
-            <StatusCard title="Shipped" count={stats.ordersByStatus.shipped || 0} revenue={stats.revenueByStatus.shipped || 0} color="#2874f0" icon="🚚" status="shipped" />
-            <StatusCard title="Delivered" count={stats.ordersByStatus.delivered || 0} revenue={stats.revenueByStatus.delivered || 0} color="#388e3c" icon="✅" status="delivered" />
-            <StatusCard title="Cancelled" count={stats.ordersByStatus.cancelled || 0} revenue={stats.revenueByStatus.cancelled || 0} color="#f44336" icon="❌" status="cancelled" />
+          <div className="card-body">
+            <div className="status-cards-grid">
+              {statusConfig.map(sc => (
+                <div
+                  key={sc.key}
+                  className={`status-mini-card${viewMode === sc.key ? ' selected' : ''}`}
+                  onClick={() => setViewMode(sc.key)}
+                  style={{ color: sc.color, borderColor: viewMode === sc.key ? sc.color : 'transparent', background: viewMode === sc.key ? sc.bg : 'var(--surface)' }}
+                >
+                  <div className="s-icon">{sc.icon}</div>
+                  <div className="s-label">{sc.label}</div>
+                  <div className="s-count">{stats.ordersByStatus[sc.key] || 0}</div>
+                  {isAdmin && (
+                    <div className="s-revenue">₹{fmt(stats.revenueByStatus[sc.key] || 0)}</div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
         {/* Orders List */}
-        <div style={{background: 'white', padding: '20px', borderRadius: '2px', boxShadow: '0 2px 4px rgba(0,0,0,0.08)'}}>
-          <h3 style={{marginTop: 0}}>
-            {viewMode === 'summary' ? `Recent Orders (${filteredOrders.length})` : `${viewMode.replace('_', ' ').toUpperCase()} Orders (${filteredOrders.length})`}
-          </h3>
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">
+              {viewMode === 'summary' ? 'Recent Orders' : `${viewMode.replace(/_/g, ' ')} Orders`}
+              <span className="page-count" style={{ marginLeft: 8 }}>{filteredOrders.length}</span>
+            </span>
+          </div>
+
           {filteredOrders.length === 0 ? (
-            <div style={{textAlign: 'center', padding: '40px'}}>
-              <div style={{fontSize: '48px', marginBottom: '10px'}}>📦</div>
-              <p style={{color: '#757575'}}>{isAdmin ? 'No orders in this category' : 'No orders yet. Start shopping!'}</p>
+            <div className="empty-state">
+              <div className="empty-icon">📦</div>
+              <div className="empty-title">{isAdmin ? 'No orders in this category' : 'No orders yet'}</div>
+              <div className="empty-desc">{isAdmin ? 'Try switching filters above' : 'Start shopping to see your orders here'}</div>
             </div>
           ) : (
-            <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
+            <div style={{ padding: '8px 0' }}>
               {filteredOrders.slice(0, 20).map(order => {
                 const firstItem = order.items?.[0];
                 const product = firstItem ? products[firstItem.product_id || firstItem.productId] : null;
-                const imageUrl = product?.images?.[0] || `https://placehold.co/80x80/e0e0e0/757575?text=Order`;
+                const imageUrl = product?.images?.[0] || `https://placehold.co/80x80/eeeeee/9e9e9e?text=Order`;
 
                 return (
-                  <div key={order.id} style={{border: '1px solid #e0e0e0', borderRadius: '4px', padding: '15px', background: '#fafafa'}}>
-                    <div style={{display: 'flex', gap: '15px', alignItems: 'flex-start'}}>
-                      <img src={imageUrl} alt="product" style={{width: '70px', height: '70px', objectFit: 'cover', borderRadius: '4px', background: 'white'}}
-                        onError={(e) => { e.target.src = 'https://placehold.co/70x70/e0e0e0/757575?text=Img'; }} />
-                      <div style={{flex: 1}}>
-                        <div style={{display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '5px'}}>
-                          <div>
-                            <div style={{fontSize: '12px', color: '#757575'}}>Order #{order.id} • {new Date(order.createdAt).toLocaleDateString('en-IN', {day: 'numeric', month: 'short', year: 'numeric'})}</div>
-                            <div style={{fontWeight: '500', fontSize: '15px', marginTop: '4px'}}>{product ? product.name : (firstItem?.name || 'Product')}</div>
-                          </div>
-                          <div style={{textAlign: 'right'}}>
-                            <div style={{fontSize: '16px', fontWeight: 'bold', color: '#212121'}}>₹{formatPrice(order.totalAmount)}</div>
-                            <div style={{display: 'inline-block', marginTop: '4px', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '500', color: 'white',
-                              background: order.status === 'delivered' ? '#388e3c' : order.status === 'cancelled' ? '#f44336' : order.status === 'shipped' ? '#2874f0' : order.status === 'processing' ? '#17a2b8' : '#ffc107',
-                              textTransform: 'capitalize'
-                            }}>
-                              {order.status.replace('_', ' ')}
-                            </div>
+                  <div key={order.id} style={{ padding: '14px 20px', borderBottom: '1px solid var(--gray-100)' }}>
+                    <div className="flex-center gap-14">
+                      <img
+                        src={imageUrl} alt="product"
+                        className="order-thumb"
+                        onError={(e) => { e.target.src = 'https://placehold.co/68x68/eeeeee/9e9e9e?text=Img'; }}
+                      />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="flex-between mb-4">
+                          <div className="order-id">Order #{order.id}</div>
+                          <div className="flex-center gap-8">
+                            <span className={getBadgeClass(order.status)}>
+                              {order.status.replace(/_/g, ' ')}
+                            </span>
                           </div>
                         </div>
+                        <div style={{ fontWeight: 600, fontSize: '0.93rem', color: 'var(--gray-900)', marginBottom: 3 }}>
+                          {product ? product.name : (firstItem?.name || 'Product')}
+                        </div>
+                        <div className="flex-between">
+                          <span className="text-muted">
+                            {new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                          <span style={{ fontWeight: 700, fontSize: '0.97rem', color: 'var(--gray-900)' }}>₹{fmt(order.totalAmount)}</span>
+                        </div>
                         {isAdmin && (
-                          <button onClick={() => deleteOrder(order.id)} style={{marginTop: '8px', padding: '4px 10px', background: '#f44336', color: 'white', border: 'none', borderRadius: '2px', cursor: 'pointer', fontSize: '11px'}}>
+                          <button
+                            onClick={() => deleteOrder(order.id)}
+                            className="btn btn-danger btn-sm"
+                            style={{ marginTop: 8 }}
+                          >
                             🗑️ Delete
                           </button>
                         )}

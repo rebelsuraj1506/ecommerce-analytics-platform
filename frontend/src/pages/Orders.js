@@ -236,95 +236,89 @@ function Orders({ token, userRole }) {
 
   if (loading) {
     return (
-      <div style={{textAlign: 'center', padding: '40px', background: '#f1f3f6', minHeight: '100vh'}}>
-        <div style={{fontSize: '48px', marginBottom: '20px'}}>⏳</div>
-        <div style={{color: '#757575'}}>Loading orders...</div>
+      <div className="page-wrap">
+        <div className="spinner-wrap">
+          <div className="spinner" />
+          <span className="text-muted">Loading orders…</span>
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{background: '#f1f3f6', minHeight: '100vh', padding: '20px'}}>
-      <div style={{maxWidth: '1400px', margin: '0 auto'}}>
-        {/* Header */}
-        <div style={{background: 'white', padding: '20px 30px', borderRadius: '2px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.08)'}}>
-          <h2 style={{margin: '0 0 5px 0', color: '#212121', fontSize: '24px', fontWeight: '500'}}>
-            {userRole === 'admin' ? '🛍️ Order Management' : '📦 All Orders'}
-          </h2>
-          <p style={{margin: 0, color: '#757575', fontSize: '14px'}}>
-            Manage and track all customer orders
-          </p>
+    <div className="page-wrap">
+      {/* Header */}
+      <div className="page-header">
+        <div className="page-title-row">
+          <span style={{fontSize: '1.4rem'}}>{userRole === 'admin' ? '🛍️' : '📦'}</span>
+          <h1 className="page-title">{userRole === 'admin' ? 'Order Management' : 'All Orders'}</h1>
+          <span className="page-count">{filteredOrders.length}</span>
         </div>
+      </div>
 
+      <div className="page-body">
         {/* Stats Cards */}
-        <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px', marginBottom: '20px'}}>
-          <div style={{background: 'white', padding: '15px', borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.08)', borderLeft: '4px solid #2196f3'}}>
-            <div style={{fontSize: '11px', color: '#757575', marginBottom: '5px'}}>TOTAL ORDERS</div>
-            <div style={{fontSize: '24px', fontWeight: 'bold', color: '#2196f3'}}>{stats.total}</div>
+        <div className="stat-grid mb-20">
+          <div className="stat-card c-primary">
+            <div className="stat-icon">🛒</div>
+            <div className="stat-label">Total Orders</div>
+            <div className="stat-value">{stats.total}</div>
           </div>
-          <div style={{background: 'white', padding: '15px', borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.08)', borderLeft: '4px solid #ffc107'}}>
-            <div style={{fontSize: '11px', color: '#757575', marginBottom: '5px'}}>PENDING</div>
-            <div style={{fontSize: '24px', fontWeight: 'bold', color: '#ffc107'}}>{stats.pending}</div>
+          <div className="stat-card c-warning">
+            <div className="stat-icon">📋</div>
+            <div className="stat-label">Pending</div>
+            <div className="stat-value">{stats.pending}</div>
           </div>
-          <div style={{background: 'white', padding: '15px', borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.08)', borderLeft: '4px solid #17a2b8'}}>
-            <div style={{fontSize: '11px', color: '#757575', marginBottom: '5px'}}>PROCESSING</div>
-            <div style={{fontSize: '24px', fontWeight: 'bold', color: '#17a2b8'}}>{stats.processing}</div>
+          <div className="stat-card c-primary">
+            <div className="stat-icon">⚙️</div>
+            <div className="stat-label">Processing</div>
+            <div className="stat-value">{stats.processing}</div>
           </div>
-          <div style={{background: 'white', padding: '15px', borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.08)', borderLeft: '4px solid #2874f0'}}>
-            <div style={{fontSize: '11px', color: '#757575', marginBottom: '5px'}}>SHIPPED</div>
-            <div style={{fontSize: '24px', fontWeight: 'bold', color: '#2874f0'}}>{stats.shipped}</div>
-          </div>
-          <div style={{background: 'white', padding: '15px', borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.08)', borderLeft: '4px solid #388e3c'}}>
-            <div style={{fontSize: '11px', color: '#757575', marginBottom: '5px'}}>DELIVERED</div>
-            <div style={{fontSize: '24px', fontWeight: 'bold', color: '#388e3c'}}>{stats.delivered}</div>
+          <div className="stat-card c-success">
+            <div className="stat-icon">✅</div>
+            <div className="stat-label">Delivered</div>
+            <div className="stat-value">{stats.delivered}</div>
           </div>
           {stats.cancelRequested > 0 && (
-            <div style={{background: 'white', padding: '15px', borderRadius: '4px', boxShadow: '0 2px 4px rgba(0,0,0,0.08)', borderLeft: '4px solid #ff9800'}}>
-              <div style={{fontSize: '11px', color: '#757575', marginBottom: '5px'}}>CANCELLATIONS</div>
-              <div style={{fontSize: '24px', fontWeight: 'bold', color: '#ff9800'}}>{stats.cancelRequested}</div>
+            <div className="stat-card c-danger">
+              <div className="stat-icon">⚠️</div>
+              <div className="stat-label">Cancel Requests</div>
+              <div className="stat-value">{stats.cancelRequested}</div>
             </div>
           )}
         </div>
 
         {/* Filters */}
-        <div style={{background: 'white', padding: '15px 20px', borderRadius: '2px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.08)'}}>
-          <div style={{fontSize: '13px', fontWeight: '500', marginBottom: '10px', color: '#212121'}}>Filter by Status:</div>
-          <div style={{display: 'flex', gap: '8px', flexWrap: 'wrap'}}>
-            {['all', 'pending', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancel_requested', 'cancelled', 'refunded'].map(status => {
-              const count = status === 'all' ? orders.length : orders.filter(o => o.status === status).length;
-              return (
-                <button 
-                  key={status} 
-                  onClick={() => setFilterStatus(status)} 
-                  style={{
-                    padding: '8px 16px', 
-                    background: filterStatus === status ? '#2874f0' : 'white', 
-                    color: filterStatus === status ? 'white' : '#212121', 
-                    border: '1px solid #e0e0e0', 
-                    borderRadius: '20px', 
-                    cursor: 'pointer', 
-                    fontSize: '13px', 
-                    fontWeight: '500',
-                    textTransform: 'capitalize',
-                    transition: 'all 0.2s'
-                  }}
-                >
-                  {status.replace('_', ' ')} ({count})
-                </button>
-              );
-            })}
+        <div className="card mb-16">
+          <div className="card-body" style={{padding: '14px 20px'}}>
+            <div className="form-label mb-8">Filter by Status</div>
+            <div className="filter-tabs">
+              {['all', 'pending', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancel_requested', 'cancelled', 'refunded'].map(status => {
+                const count = status === 'all' ? orders.length : orders.filter(o => o.status === status).length;
+                return (
+                  <button
+                    key={status}
+                    className={`filter-tab${filterStatus === status ? ' active' : ''}`}
+                    onClick={() => setFilterStatus(status)}
+                  >
+                    {status.replace(/_/g, ' ')} ({count})
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
         {/* Orders List */}
-        <div style={{background: 'white', padding: '20px', borderRadius: '2px', boxShadow: '0 2px 4px rgba(0,0,0,0.08)'}}>
+        <div>
           {filteredOrders.length === 0 ? (
-            <div style={{textAlign: 'center', padding: '60px', color: '#757575'}}>
-              <div style={{fontSize: '48px', marginBottom: '15px'}}>📦</div>
-              <h3 style={{fontWeight: '400'}}>No orders found</h3>
-            </div>
+            <div className="card"><div className="empty-state">
+              <div className="empty-icon">📦</div>
+              <div className="empty-title">No orders found</div>
+              <div className="empty-desc">Try changing the status filter above</div>
+            </div></div>
           ) : (
-            <div style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
+            <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
               {filteredOrders.map(order => {
                 const firstItem = order.items?.[0];
                 const product = firstItem ? products[firstItem.product_id || firstItem.productId] : null;
@@ -573,71 +567,23 @@ function Orders({ token, userRole }) {
 
         {/* Shipping Modal */}
         {selectedOrder && selectedOrder.pendingStatus === 'shipped' && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            padding: '20px'
-          }}>
-            <div style={{
-              background: 'white',
-              borderRadius: '8px',
-              maxWidth: '500px',
-              width: '100%',
-              boxShadow: '0 10px 40px rgba(0,0,0,0.3)'
-            }}>
-              <div style={{
-                padding: '20px',
-                borderBottom: '1px solid #e0e0e0',
-                background: 'linear-gradient(135deg, #2874f0 0%, #00bcd4 100%)',
-                color: 'white'
-              }}>
-                <h3 style={{margin: 0, fontSize: '18px'}}>🚚 Add Shipping Details</h3>
-                <p style={{margin: '5px 0 0 0', fontSize: '13px', opacity: 0.9}}>Order #{selectedOrder.id}</p>
-              </div>
-
-              <div style={{padding: '20px'}}>
-                <div style={{marginBottom: '15px'}}>
-                  <label style={{display: 'block', fontSize: '13px', fontWeight: '500', marginBottom: '5px', color: '#212121'}}>
-                    Tracking Number <span style={{color: '#f44336'}}>*</span>
-                  </label>
-                  <input 
-                    type="text"
-                    value={trackingDetails.trackingNumber}
-                    onChange={(e) => setTrackingDetails({...trackingDetails, trackingNumber: e.target.value})}
-                    placeholder="e.g., 1234567890"
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid #e0e0e0',
-                      borderRadius: '4px',
-                      fontSize: '14px'
-                    }}
-                  />
+          <div className="modal-overlay">
+            <div className="modal">
+              <div className="modal-header" style={{background: 'linear-gradient(135deg, var(--brand-primary) 0%, #00bcd4 100)', borderRadius: 'var(--radius-md) var(--radius-md) 0 0'}}>
+                <div>
+                  <h3 className="modal-title" style={{color: '#fff'}}>🚚 Add Shipping Details</h3>
+                  <div style={{fontSize: '0.78rem', color: 'rgba(255,255,255,0.8)', marginTop: 2}}>Order #{selectedOrder.id}</div>
                 </div>
-
-                <div style={{marginBottom: '15px'}}>
-                  <label style={{display: 'block', fontSize: '13px', fontWeight: '500', marginBottom: '5px', color: '#212121'}}>
-                    Courier Name <span style={{color: '#f44336'}}>*</span>
-                  </label>
-                  <select
-                    value={trackingDetails.courierName}
-                    onChange={(e) => setTrackingDetails({...trackingDetails, courierName: e.target.value})}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid #e0e0e0',
-                      borderRadius: '4px',
-                      fontSize: '14px'
-                    }}
-                  >
+                <button className="modal-close" style={{background: 'rgba(255,255,255,0.15)', color: '#fff'}} onClick={() => { setSelectedOrder(null); setTrackingDetails({ trackingNumber: '', courierName: '', estimatedDelivery: '' }); }}>✕</button>
+              </div>
+              <div className="modal-body">
+                <div className="form-group mb-12">
+                  <label className="form-label">Tracking Number <span style={{color: 'var(--brand-danger)'}}>*</span></label>
+                  <input type="text" className="form-control" value={trackingDetails.trackingNumber} onChange={(e) => setTrackingDetails({...trackingDetails, trackingNumber: e.target.value})} placeholder="e.g., 1234567890" />
+                </div>
+                <div className="form-group mb-12">
+                  <label className="form-label">Courier Name <span style={{color: 'var(--brand-danger)'}}>*</span></label>
+                  <select className="form-control" value={trackingDetails.courierName} onChange={(e) => setTrackingDetails({...trackingDetails, courierName: e.target.value})}>
                     <option value="">Select Courier</option>
                     <option value="Blue Dart">Blue Dart</option>
                     <option value="Delhivery">Delhivery</option>
@@ -648,68 +594,14 @@ function Orders({ token, userRole }) {
                     <option value="DTDC">DTDC</option>
                   </select>
                 </div>
-
-                <div style={{marginBottom: '15px'}}>
-                  <label style={{display: 'block', fontSize: '13px', fontWeight: '500', marginBottom: '5px', color: '#212121'}}>
-                    Estimated Delivery Date (Optional)
-                  </label>
-                  <input 
-                    type="date"
-                    value={trackingDetails.estimatedDelivery}
-                    onChange={(e) => setTrackingDetails({...trackingDetails, estimatedDelivery: e.target.value})}
-                    min={new Date().toISOString().split('T')[0]}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      border: '1px solid #e0e0e0',
-                      borderRadius: '4px',
-                      fontSize: '14px'
-                    }}
-                  />
+                <div className="form-group">
+                  <label className="form-label">Estimated Delivery Date <span className="text-muted">(optional)</span></label>
+                  <input type="date" className="form-control" value={trackingDetails.estimatedDelivery} onChange={(e) => setTrackingDetails({...trackingDetails, estimatedDelivery: e.target.value})} min={new Date().toISOString().split('T')[0]} />
                 </div>
               </div>
-
-              <div style={{
-                padding: '15px 20px',
-                borderTop: '1px solid #e0e0e0',
-                display: 'flex',
-                gap: '10px',
-                justifyContent: 'flex-end',
-                background: '#f8f9fa'
-              }}>
-                <button 
-                  onClick={() => {
-                    setSelectedOrder(null);
-                    setTrackingDetails({ trackingNumber: '', courierName: '', estimatedDelivery: '' });
-                  }}
-                  style={{
-                    padding: '10px 20px',
-                    background: '#757575',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: '500'
-                  }}
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={handleShippingSubmit}
-                  style={{
-                    padding: '10px 20px',
-                    background: '#2874f0',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: '500'
-                  }}
-                >
-                  Confirm & Mark as Shipped
-                </button>
+              <div className="modal-footer">
+                <button className="btn btn-ghost" onClick={() => { setSelectedOrder(null); setTrackingDetails({ trackingNumber: '', courierName: '', estimatedDelivery: '' }); }}>Cancel</button>
+                <button className="btn btn-blue" onClick={handleShippingSubmit}>Confirm & Mark as Shipped</button>
               </div>
             </div>
           </div>

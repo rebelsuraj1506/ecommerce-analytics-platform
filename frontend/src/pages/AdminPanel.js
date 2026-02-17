@@ -577,8 +577,14 @@ function AdminPanel({ token }) {
 
   // ==================== MAIN ADMIN PANEL ====================
   return (
-    <div style={{background: '#f1f3f6', minHeight: '100vh', padding: '20px'}}>
-      <div style={{maxWidth: '1400px', margin: '0 auto'}}>
+    <div className="page-wrap">
+      <div className="page-header">
+        <div className="page-title-row">
+          <span style={{fontSize: '1.4rem'}}>🔐</span>
+          <h1 className="page-title">User Management</h1>
+        </div>
+      </div>
+      <div className="page-body">
         <div style={{background: 'white', padding: '20px 30px', borderRadius: '2px', marginBottom: '20px', boxShadow: '0 2px 4px rgba(0,0,0,0.08)'}}>
           <h2 style={{margin: '0 0 20px 0', color: '#212121', fontSize: '24px', fontWeight: '500'}}>🔐 Admin Control Panel</h2>
           
@@ -681,7 +687,7 @@ function AdminPanel({ token }) {
                 <input 
                   type="text" placeholder="e.g. John Doe" value={addUserForm.name} required
                   onChange={(e) => setAddUserForm({...addUserForm, name: e.target.value})}
-                  style={{width: '100%', padding: '12px', border: '1px solid #e0e0e0', borderRadius: '4px', fontSize: '14px', boxSizing: 'border-box'}}
+                  className="form-control"
                 />
               </div>
 
@@ -690,7 +696,7 @@ function AdminPanel({ token }) {
                 <input 
                   type="email" placeholder="e.g. john@example.com" value={addUserForm.email} required
                   onChange={(e) => setAddUserForm({...addUserForm, email: e.target.value})}
-                  style={{width: '100%', padding: '12px', border: '1px solid #e0e0e0', borderRadius: '4px', fontSize: '14px', boxSizing: 'border-box'}}
+                  className="form-control"
                 />
               </div>
 
@@ -699,7 +705,7 @@ function AdminPanel({ token }) {
                 <input 
                   type="password" placeholder="Min 8 chars, upper, lower, number, special" value={addUserForm.password} required
                   onChange={(e) => setAddUserForm({...addUserForm, password: e.target.value})}
-                  style={{width: '100%', padding: '12px', border: '1px solid #e0e0e0', borderRadius: '4px', fontSize: '14px', boxSizing: 'border-box'}}
+                  className="form-control"
                 />
                 <div style={{fontSize: '11px', color: '#757575', marginTop: '5px'}}>
                   Must contain: uppercase, lowercase, number, and special character (@$!%*?&)
@@ -711,7 +717,7 @@ function AdminPanel({ token }) {
                 <input 
                   type="tel" placeholder="e.g. +91 9876543210" value={addUserForm.phone}
                   onChange={(e) => setAddUserForm({...addUserForm, phone: e.target.value})}
-                  style={{width: '100%', padding: '12px', border: '1px solid #e0e0e0', borderRadius: '4px', fontSize: '14px', boxSizing: 'border-box'}}
+                  className="form-control"
                 />
               </div>
 

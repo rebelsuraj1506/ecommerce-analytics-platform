@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 
 const styles = `
-  @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap');
 
   * { box-sizing: border-box; }
 
   .cat-page {
     background: #f1f3f6;
     min-height: 100vh;
-    font-family: 'Inter', sans-serif;
+    font-family: 'DM Sans', sans-serif;
   }
 
   /* ── Page Header ── */
@@ -33,7 +33,7 @@ const styles = `
     font-size: 22px; box-shadow: 0 2px 8px rgba(40,116,240,0.3);
   }
   .cat-header h2 {
-    margin: 0; font-family: 'Nunito', sans-serif;
+    margin: 0; font-family: 'DM Sans', sans-serif;
     font-size: 20px; font-weight: 800; color: #212121;
     letter-spacing: -0.3px;
   }
@@ -83,7 +83,7 @@ const styles = `
   }
   .summary-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
   .summary-label { font-size: 11px; color: #878787; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
-  .summary-value { font-size: 22px; font-weight: 800; font-family: 'Nunito', sans-serif; color: var(--accent); }
+  .summary-value { font-size: 22px; font-weight: 800; font-family: 'DM Sans', sans-serif; color: var(--accent); }
   .summary-sub { font-size: 11px; color: #b0b0b0; margin-top: 2px; }
 
   /* ── Category Block ── */
@@ -112,7 +112,7 @@ const styles = `
   }
   .cat-title-group { display: flex; align-items: center; gap: 14px; z-index: 1; }
   .cat-emoji { font-size: 36px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2)); }
-  .cat-name { font-family: 'Nunito', sans-serif; font-size: 18px; font-weight: 800; color: white; margin: 0; }
+  .cat-name { font-family: 'DM Sans', sans-serif; font-size: 18px; font-weight: 800; color: white; margin: 0; }
   .cat-meta { font-size: 12px; color: rgba(255,255,255,0.85); margin: 3px 0 0; }
   .cat-badges { display: flex; gap: 8px; z-index: 1; }
   .cat-badge {
@@ -226,7 +226,7 @@ const styles = `
     border: 1.5px solid #ef9a9a; border-radius: 4px;
     cursor: pointer; font-size: 12px; font-weight: 600;
     display: flex; align-items: center; justify-content: center; gap: 6px;
-    transition: all 0.2s; font-family: 'Inter', sans-serif;
+    transition: all 0.2s; font-family: 'DM Sans', sans-serif;
   }
   .btn-delete:hover {
     background: #d32f2f; color: white;
@@ -287,21 +287,21 @@ const styles = `
   @keyframes slideUp { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
   .modal-icon { font-size: 48px; text-align: center; margin-bottom: 16px; }
-  .modal-title { font-family: 'Nunito', sans-serif; font-size: 18px; font-weight: 800; color: #212121; margin: 0 0 8px; text-align: center; }
+  .modal-title { font-family: 'DM Sans', sans-serif; font-size: 18px; font-weight: 800; color: #212121; margin: 0 0 8px; text-align: center; }
   .modal-body { font-size: 13px; color: #757575; text-align: center; margin-bottom: 24px; line-height: 1.6; }
   .modal-product { font-weight: 700; color: #212121; }
   .modal-actions { display: flex; gap: 12px; }
   .btn-cancel {
     flex: 1; padding: 12px; background: #f5f5f5; color: #424242;
     border: 1px solid #e0e0e0; border-radius: 6px;
-    cursor: pointer; font-size: 14px; font-weight: 600; font-family: 'Inter', sans-serif;
+    cursor: pointer; font-size: 14px; font-weight: 600; font-family: 'DM Sans', sans-serif;
     transition: background 0.2s;
   }
   .btn-cancel:hover { background: #eeeeee; }
   .btn-confirm-delete {
     flex: 1; padding: 12px; background: #d32f2f; color: white;
     border: none; border-radius: 6px; cursor: pointer;
-    font-size: 14px; font-weight: 600; font-family: 'Inter', sans-serif;
+    font-size: 14px; font-weight: 600; font-family: 'DM Sans', sans-serif;
     transition: background 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;
   }
   .btn-confirm-delete:hover { background: #b71c1c; }
