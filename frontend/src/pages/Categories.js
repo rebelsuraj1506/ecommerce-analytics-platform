@@ -1,365 +1,41 @@
 import React, { useState, useEffect } from 'react';
-
-const styles = `
-  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap');
-
-  * { box-sizing: border-box; }
-
-  .cat-page {
-    background: #f1f3f6;
-    min-height: 100vh;
-    font-family: 'DM Sans', sans-serif;
-  }
-
-  /* ── Page Header ── */
-  .cat-header {
-    background: #fff;
-    border-bottom: 1px solid #e0e0e0;
-    padding: 18px 28px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    position: sticky;
-    top: 0;
-    z-index: 50;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-  }
-  .cat-header-left { display: flex; align-items: center; gap: 14px; }
-  .cat-header-icon {
-    width: 44px; height: 44px;
-    background: linear-gradient(135deg, #2874f0, #1a5dc7);
-    border-radius: 10px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 22px; box-shadow: 0 2px 8px rgba(40,116,240,0.3);
-  }
-  .cat-header h2 {
-    margin: 0; font-family: 'DM Sans', sans-serif;
-    font-size: 20px; font-weight: 800; color: #212121;
-    letter-spacing: -0.3px;
-  }
-  .cat-header p {
-    margin: 2px 0 0; font-size: 12px; color: #878787;
-  }
-  .cat-stats-pill {
-    display: flex; gap: 10px; align-items: center;
-  }
-  .stat-chip {
-    background: #f0f4ff; border: 1px solid #c5d5fb;
-    border-radius: 20px; padding: 6px 14px;
-    font-size: 12px; font-weight: 600; color: #2874f0;
-    display: flex; align-items: center; gap: 5px;
-  }
-  .stat-chip.orange { background: #fff4ec; border-color: #ffd5b0; color: #fb641b; }
-
-  /* ── Loading ── */
-  .cat-loading {
-    min-height: 100vh; background: #f1f3f6;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 16px;
-  }
-  .cat-spinner {
-    width: 48px; height: 48px;
-    border: 4px solid #e0e0e0;
-    border-top-color: #2874f0;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* ── Body ── */
-  .cat-body { max-width: 1440px; margin: 0 auto; padding: 24px 24px 40px; }
-
-  /* ── Summary Bar ── */
-  .cat-summary {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 14px; margin-bottom: 28px;
-  }
-  .summary-card {
-    background: #fff; border-radius: 8px;
-    padding: 16px 20px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
-    border-left: 4px solid var(--accent);
-    transition: box-shadow 0.2s;
-  }
-  .summary-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
-  .summary-label { font-size: 11px; color: #878787; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
-  .summary-value { font-size: 22px; font-weight: 800; font-family: 'DM Sans', sans-serif; color: var(--accent); }
-  .summary-sub { font-size: 11px; color: #b0b0b0; margin-top: 2px; }
-
-  /* ── Category Block ── */
-  .category-section { margin-bottom: 32px; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
-
-  /* ── Category Header ── */
-  .cat-section-header {
-    padding: 18px 24px;
-    background: var(--cat-color, #2874f0);
-    display: flex; align-items: center; justify-content: space-between;
-    position: relative; overflow: hidden;
-  }
-  .cat-section-header::before {
-    content: '';
-    position: absolute; right: -30px; top: -30px;
-    width: 120px; height: 120px;
-    border-radius: 50%;
-    background: rgba(255,255,255,0.1);
-  }
-  .cat-section-header::after {
-    content: '';
-    position: absolute; right: 20px; bottom: -40px;
-    width: 90px; height: 90px;
-    border-radius: 50%;
-    background: rgba(255,255,255,0.07);
-  }
-  .cat-title-group { display: flex; align-items: center; gap: 14px; z-index: 1; }
-  .cat-emoji { font-size: 36px; line-height: 1; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2)); }
-  .cat-name { font-family: 'DM Sans', sans-serif; font-size: 18px; font-weight: 800; color: white; margin: 0; }
-  .cat-meta { font-size: 12px; color: rgba(255,255,255,0.85); margin: 3px 0 0; }
-  .cat-badges { display: flex; gap: 8px; z-index: 1; }
-  .cat-badge {
-    background: rgba(255,255,255,0.2); backdrop-filter: blur(4px);
-    border: 1px solid rgba(255,255,255,0.3);
-    border-radius: 20px; padding: 5px 14px;
-    font-size: 11px; font-weight: 600; color: white;
-    display: flex; align-items: center; gap: 4px;
-  }
-
-  /* ── Product Grid ── */
-  .product-grid {
-    background: #fff;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
-    gap: 1px;
-    background-color: #ebebeb;
-  }
-
-  /* ── Product Card ── */
-  .product-card {
-    background: #fff;
-    padding: 16px;
-    position: relative;
-    transition: transform 0.2s, box-shadow 0.2s;
-    cursor: default;
-  }
-  .product-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.12); z-index: 2; }
-
-  /* Image Container */
-  .product-img-wrap {
-    position: relative; padding-top: 100%;
-    background: #fafafa; border-radius: 6px;
-    overflow: hidden; margin-bottom: 12px;
-    border: 1px solid #f0f0f0;
-  }
-  .product-img {
-    position: absolute; top: 0; left: 0;
-    width: 100%; height: 100%;
-    object-fit: contain; padding: 14px;
-    transition: transform 0.3s ease;
-  }
-  .product-card:hover .product-img { transform: scale(1.04); }
-
-  /* Badges on image */
-  .badge-stock {
-    position: absolute; bottom: 8px; left: 8px;
-    padding: 3px 9px; border-radius: 3px;
-    font-size: 10px; font-weight: 700; color: white;
-    letter-spacing: 0.3px;
-  }
-  .badge-stock.in { background: #388e3c; }
-  .badge-stock.low { background: #ff9800; }
-  .badge-stock.out { background: #9e9e9e; }
-
-  .badge-admin-only {
-    position: absolute; top: 8px; right: 8px;
-    background: #fff3e0; color: #e65100;
-    border: 1px solid #ffcc02;
-    padding: 2px 7px; border-radius: 3px;
-    font-size: 9px; font-weight: 700; letter-spacing: 0.3px;
-  }
-
-  /* Product Info */
-  .product-name {
-    font-size: 13px; font-weight: 600; color: #212121;
-    margin: 0 0 5px; line-height: 1.35;
-    display: -webkit-box; -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical; overflow: hidden;
-  }
-
-  .product-rating {
-    display: flex; align-items: center; gap: 5px;
-    margin-bottom: 6px;
-  }
-  .rating-pill {
-    background: #388e3c; color: white;
-    padding: 2px 7px; border-radius: 3px;
-    font-size: 11px; font-weight: 700;
-    display: flex; align-items: center; gap: 3px;
-  }
-  .rating-count { font-size: 11px; color: #878787; }
-
-  .product-desc {
-    font-size: 11px; color: #878787; margin: 0 0 10px;
-    display: -webkit-box; -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical; overflow: hidden;
-    line-height: 1.4;
-  }
-
-  /* Price Table */
-  .price-table {
-    border-top: 1px solid #f0f0f0;
-    padding-top: 10px; margin-bottom: 12px;
-  }
-  .price-row {
-    display: flex; justify-content: space-between;
-    align-items: center; margin-bottom: 5px;
-    font-size: 12px;
-  }
-  .price-label { color: #878787; }
-  .price-val { font-weight: 600; color: #212121; }
-  .price-val.blue { color: #2874f0; }
-  .price-val.green { color: #388e3c; font-size: 13px; }
-  .price-divider { border: none; border-top: 1px dashed #eee; margin: 6px 0; }
-
-  /* Delete Button - Admin Only */
-  .btn-delete {
-    width: 100%; padding: 8px 12px;
-    background: #fff; color: #d32f2f;
-    border: 1.5px solid #ef9a9a; border-radius: 4px;
-    cursor: pointer; font-size: 12px; font-weight: 600;
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-    transition: all 0.2s; font-family: 'DM Sans', sans-serif;
-  }
-  .btn-delete:hover {
-    background: #d32f2f; color: white;
-    border-color: #d32f2f;
-    box-shadow: 0 2px 8px rgba(211,47,47,0.3);
-  }
-
-  /* Admin Badge on delete section */
-  .admin-gate {
-    display: flex; flex-direction: column; gap: 4px;
-  }
-  .admin-label {
-    font-size: 9px; font-weight: 700; color: #ff9800;
-    text-transform: uppercase; letter-spacing: 0.5px;
-    display: flex; align-items: center; gap: 4px;
-  }
-
-  /* Empty State */
-  .empty-state {
-    background: #fff; padding: 48px 24px;
-    text-align: center;
-  }
-  .empty-icon { font-size: 48px; margin-bottom: 12px; }
-  .empty-title { font-size: 14px; color: #9e9e9e; font-weight: 500; }
-
-  /* No categories state */
-  .no-categories {
-    background: white; border-radius: 10px;
-    padding: 80px 40px; text-align: center;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-  }
-
-  /* Admin-only notice bar */
-  .admin-notice {
-    background: linear-gradient(135deg, #fff3e0 0%, #fff8f5 100%);
-    border: 1px solid #ffe0b2;
-    border-radius: 8px; padding: 12px 18px;
-    margin-bottom: 20px;
-    display: flex; align-items: center; gap: 10px;
-    font-size: 13px; color: #e65100; font-weight: 500;
-  }
-
-  /* Delete confirm modal */
-  .modal-overlay {
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,0.5); backdrop-filter: blur(3px);
-    z-index: 1000; display: flex; align-items: center; justify-content: center;
-    animation: fadeIn 0.15s ease;
-  }
-  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-  .modal-box {
-    background: #fff; border-radius: 12px;
-    padding: 32px; max-width: 420px; width: 90%;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-    animation: slideUp 0.2s ease;
-  }
-  @keyframes slideUp { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-
-  .modal-icon { font-size: 48px; text-align: center; margin-bottom: 16px; }
-  .modal-title { font-family: 'DM Sans', sans-serif; font-size: 18px; font-weight: 800; color: #212121; margin: 0 0 8px; text-align: center; }
-  .modal-body { font-size: 13px; color: #757575; text-align: center; margin-bottom: 24px; line-height: 1.6; }
-  .modal-product { font-weight: 700; color: #212121; }
-  .modal-actions { display: flex; gap: 12px; }
-  .btn-cancel {
-    flex: 1; padding: 12px; background: #f5f5f5; color: #424242;
-    border: 1px solid #e0e0e0; border-radius: 6px;
-    cursor: pointer; font-size: 14px; font-weight: 600; font-family: 'DM Sans', sans-serif;
-    transition: background 0.2s;
-  }
-  .btn-cancel:hover { background: #eeeeee; }
-  .btn-confirm-delete {
-    flex: 1; padding: 12px; background: #d32f2f; color: white;
-    border: none; border-radius: 6px; cursor: pointer;
-    font-size: 14px; font-weight: 600; font-family: 'DM Sans', sans-serif;
-    transition: background 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;
-  }
-  .btn-confirm-delete:hover { background: #b71c1c; }
-  .btn-confirm-delete:disabled { background: #ef9a9a; cursor: not-allowed; }
-
-  /* Toast */
-  .toast {
-    position: fixed; bottom: 28px; right: 28px;
-    background: #323232; color: white;
-    padding: 14px 22px; border-radius: 8px;
-    font-size: 13px; font-weight: 500;
-    display: flex; align-items: center; gap: 10px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
-    animation: slideInRight 0.3s ease;
-    z-index: 2000;
-  }
-  .toast.success { background: #1b5e20; }
-  .toast.error { background: #b71c1c; }
-  @keyframes slideInRight {
-    from { transform: translateX(80px); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
-  }
-`;
-
+import './pages.css';
+import BackToTop from './BackToTop';
 const CATEGORY_META = {
-  electronics: { icon: '💻', color: '#1565c0', gradient: 'linear-gradient(135deg, #1976d2, #1565c0)' },
-  clothing:    { icon: '👕', color: '#b71c1c', gradient: 'linear-gradient(135deg, #e53935, #b71c1c)' },
-  books:       { icon: '📚', color: '#1b5e20', gradient: 'linear-gradient(135deg, #43a047, #1b5e20)' },
-  home:        { icon: '🏠', color: '#e65100', gradient: 'linear-gradient(135deg, #fb8c00, #e65100)' },
-  sports:      { icon: '⚽', color: '#4a148c', gradient: 'linear-gradient(135deg, #8e24aa, #4a148c)' },
-  toys:        { icon: '🧸', color: '#006064', gradient: 'linear-gradient(135deg, #00acc1, #006064)' },
-  other:       { icon: '📦', color: '#37474f', gradient: 'linear-gradient(135deg, #546e7a, #37474f)' },
+  electronics: { icon: '💻', gradient: 'linear-gradient(135deg, #1976d2, #1565c0)' },
+  clothing:    { icon: '👕', gradient: 'linear-gradient(135deg, #e53935, #b71c1c)' },
+  books:       { icon: '📚', gradient: 'linear-gradient(135deg, #43a047, #1b5e20)' },
+  home:        { icon: '🏠', gradient: 'linear-gradient(135deg, #fb8c00, #e65100)' },
+  sports:      { icon: '⚽', gradient: 'linear-gradient(135deg, #8e24aa, #4a148c)' },
+  toys:        { icon: '🧸', gradient: 'linear-gradient(135deg, #00acc1, #006064)' },
+  other:       { icon: '📦', gradient: 'linear-gradient(135deg, #546e7a, #37474f)' },
 };
 
 function formatINR(n) {
   return '₹' + Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
 }
 
-// ── Delete Confirm Modal ──
 function DeleteModal({ product, onConfirm, onCancel, loading }) {
   return (
     <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal-box" onClick={e => e.stopPropagation()}>
-        <div className="modal-icon">🗑️</div>
-        <div className="modal-title">Delete Product?</div>
-        <div className="modal-body">
-          You're about to permanently delete{' '}
-          <span className="modal-product">"{product.name}"</span>.
-          <br />This action <strong>cannot be undone</strong>.
+      <div className="modal" style={{ maxWidth: 420 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title">Delete Product?</span>
+          <button className="modal-close" onClick={onCancel}>✕</button>
         </div>
-        <div className="modal-actions">
-          <button className="btn-cancel" onClick={onCancel}>Cancel</button>
-          <button
-            className="btn-confirm-delete"
-            onClick={onConfirm}
-            disabled={loading}
-          >
-            {loading ? '⏳ Deleting…' : '🗑️ Delete'}
+        <div className="modal-body" style={{ textAlign: 'center', padding: '28px 24px' }}>
+          <div style={{ fontSize: '3.2rem', marginBottom: 14 }}>🗑️</div>
+          <p style={{ fontSize: '.9rem', color: 'var(--gray-700)', marginBottom: 8, fontWeight: 700 }}>
+            "{product.name}"
+          </p>
+          <p style={{ fontSize: '.8rem', color: 'var(--gray-500)', lineHeight: 1.5 }}>
+            This action <strong>cannot be undone</strong>. The product and all its data will be permanently removed.
+          </p>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
+          <button className="btn btn-danger" onClick={onConfirm} disabled={loading}>
+            {loading ? '⏳ Deleting…' : '🗑️ Delete Product'}
           </button>
         </div>
       </div>
@@ -367,18 +43,17 @@ function DeleteModal({ product, onConfirm, onCancel, loading }) {
   );
 }
 
-// ── Toast Notification ──
 function Toast({ message, type }) {
+  const cls = type === 'success' ? 'toast-success' : type === 'error' ? 'toast-error' : 'toast-info';
   const icons = { success: '✅', error: '❌', info: 'ℹ️' };
   return (
-    <div className={`toast ${type}`}>
+    <div className={`toast-fixed ${cls}`}>
       <span>{icons[type] || '•'}</span>
       {message}
     </div>
   );
 }
 
-// ── Product Card ──
 function ProductCard({ product, isAdmin, onDeleteClick }) {
   const inv = Number(product.inventory) || 0;
   const totalVal = product.price * inv;
@@ -387,76 +62,80 @@ function ProductCard({ product, isAdmin, onDeleteClick }) {
   const avgRating = product.rating?.average ?? 0;
   const ratingCount = product.rating?.count ?? product.reviews?.length ?? 0;
 
-  const stockClass = inv === 0 ? 'out' : inv < 10 ? 'low' : 'in';
-  const stockLabel = inv === 0 ? 'Out of Stock' : `${inv} in stock`;
+  const stockBg = inv === 0 ? 'var(--danger)' : inv < 10 ? 'var(--warning)' : 'var(--success)';
+  const stockLabel = inv === 0 ? 'Out of Stock' : inv < 10 ? `Only ${inv} left` : `${inv} in stock`;
 
   return (
     <div className="product-card">
-      {isAdmin && <div className="badge-admin-only">ADMIN</div>}
-
-      {/* Image */}
-      <div className="product-img-wrap">
+      <div className="product-card-img">
         <img
           src={imageUrl}
           alt={product.name}
-          className="product-img"
           onError={e => { e.target.src = `https://via.placeholder.com/200x200?text=${encodeURIComponent(product.name)}`; }}
         />
-        <div className={`badge-stock ${stockClass}`}>{stockLabel}</div>
+        <span className="product-stock-badge" style={{ background: stockBg }}>{stockLabel}</span>
+        {isAdmin && (
+          <span style={{
+            position: 'absolute', top: 8, right: 8,
+            background: 'var(--warning-bg)', color: 'var(--warning)',
+            border: '1px solid #ffe082',
+            padding: '2px 7px', borderRadius: 'var(--radius-xs)',
+            fontSize: '.62rem', fontWeight: 700, letterSpacing: '.3px'
+          }}>ADMIN</span>
+        )}
       </div>
 
-      {/* Name */}
-      <p className="product-name">{product.name}</p>
+      <div className="product-card-body">
+        <span className="product-category">{product.category}</span>
+        <p className="product-name">{product.name}</p>
 
-      {/* Rating */}
-      {hasRating && (
-        <div className="product-rating">
-          <div className="rating-pill">
-            ★ {avgRating.toFixed(1)}
+        {hasRating && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+            <span className="rating-pill">★ {avgRating.toFixed(1)}</span>
+            <span className="rating-count">({ratingCount})</span>
           </div>
-          <span className="rating-count">({ratingCount})</span>
-        </div>
-      )}
+        )}
 
-      {/* Description */}
-      {product.description && (
-        <p className="product-desc">{product.description}</p>
-      )}
+        {product.description && (
+          <p className="product-desc">{product.description}</p>
+        )}
 
-      {/* Pricing Table */}
-      <div className="price-table">
-        <div className="price-row">
-          <span className="price-label">Unit Price</span>
-          <span className="price-val">{formatINR(product.price)}</span>
-        </div>
-        <div className="price-row">
-          <span className="price-label">Inventory</span>
-          <span className="price-val blue">{inv} units</span>
-        </div>
-        <hr className="price-divider" />
-        <div className="price-row">
-          <span className="price-label">Total Value</span>
-          <span className="price-val green">{formatINR(totalVal)}</span>
+        <div className="product-card-footer">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 4 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.75rem', color: 'var(--gray-500)' }}>
+              <span>Unit Price</span>
+              <span style={{ fontWeight: 700, color: 'var(--gray-900)' }}>{formatINR(product.price)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.75rem', color: 'var(--gray-500)' }}>
+              <span>Inventory</span>
+              <span style={{ fontWeight: 700, color: 'var(--fk-blue)' }}>{inv} units</span>
+            </div>
+            <div style={{ borderTop: '1px dashed var(--gray-200)', margin: '4px 0' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.75rem', color: 'var(--gray-500)' }}>
+              <span>Total Value</span>
+              <span style={{ fontWeight: 800, color: 'var(--success)', fontSize: '.8rem' }}>{formatINR(totalVal)}</span>
+            </div>
+          </div>
+
+          {isAdmin && (
+            <div>
+              <div style={{ fontSize: '.62rem', fontWeight: 700, color: 'var(--warning)', textTransform: 'uppercase', letterSpacing: '.4px', marginBottom: 4 }}>
+                ⚙️ Admin Action
+              </div>
+              <button
+                className="btn btn-danger btn-sm w-full"
+                onClick={() => onDeleteClick(product)}
+              >
+                🗑️ Delete Product
+              </button>
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Delete — ADMIN ONLY */}
-      {isAdmin && (
-        <div className="admin-gate">
-          <div className="admin-label">⚙️ Admin Action</div>
-          <button
-            className="btn-delete"
-            onClick={() => onDeleteClick(product)}
-          >
-            🗑️ Delete Product
-          </button>
-        </div>
-      )}
     </div>
   );
 }
 
-// ── Main Component ──
 function Categories({ token, userRole }) {
   const isAdmin = userRole === 'admin';
 
@@ -497,10 +176,15 @@ function Categories({ token, userRole }) {
     }
   };
 
+  useEffect(() => {
+    document.title = 'Categories — ShopMart';
+    return () => { document.title = 'ShopMart'; };
+  }, []);
+
   useEffect(() => { fetchData(); }, []);
 
   const handleDeleteClick = (product) => {
-    if (!isAdmin) return; // Strict guard — only admins can trigger this
+    if (!isAdmin) return;
     setDeleteTarget(product);
   };
 
@@ -527,7 +211,6 @@ function Categories({ token, userRole }) {
     }
   };
 
-  // Aggregate stats
   const totalProducts = Object.values(productsByCategory).reduce((s, arr) => s + arr.length, 0);
   const totalInventory = Object.values(productsByCategory)
     .flat().reduce((s, p) => s + (Number(p.inventory) || 0), 0);
@@ -536,140 +219,143 @@ function Categories({ token, userRole }) {
 
   if (loading) {
     return (
-      <>
-        <style>{styles}</style>
-        <div className="cat-loading">
-          <div className="cat-spinner" />
-          <p style={{ color: '#878787', fontSize: '14px', margin: 0 }}>Loading categories…</p>
+      <div className="page-wrap">
+        <div className="spinner-wrap">
+          <div className="spinner" />
+          <p style={{ color: 'var(--gray-500)', fontSize: '.86rem', margin: 0 }}>Loading categories…</p>
         </div>
-      </>
+      </div>
     );
   }
 
   return (
-    <>
-      <style>{styles}</style>
-
-      <div className="cat-page">
-        {/* ── Sticky Header ── */}
-        <div className="cat-header">
-          <div className="cat-header-left">
-            <div className="cat-header-icon">🏷️</div>
-            <div>
-              <h2>Product Categories</h2>
-              <p>{categories.length} categories • Browse by department</p>
-            </div>
-          </div>
-          <div className="cat-stats-pill">
-            <div className="stat-chip">📦 {totalProducts} products</div>
-            <div className="stat-chip orange">{formatINR(totalValue)} total value</div>
+    <div className="page-wrap">
+      {/* Page Header */}
+      <div className="page-header">
+        <div className="page-title-row">
+          <div style={{
+            width: 40, height: 40,
+            background: 'linear-gradient(135deg, var(--fk-blue), var(--fk-blue-dark))',
+            borderRadius: 'var(--radius-md)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '1.2rem', boxShadow: '0 2px 8px rgba(40,116,240,.3)', flexShrink: 0
+          }}>🏷️</div>
+          <div>
+            <h1 className="page-title">Product Categories</h1>
+            <p style={{ fontSize: '.72rem', color: 'var(--gray-500)', marginTop: 2 }}>
+              {categories.length} categories · Browse by department
+            </p>
           </div>
         </div>
 
-        <div className="cat-body">
-          {/* Summary Cards */}
-          {categories.length > 0 && (
-            <div className="cat-summary">
-              <div className="summary-card" style={{ '--accent': '#2874f0' }}>
-                <div className="summary-label">Total Categories</div>
-                <div className="summary-value">{categories.length}</div>
-                <div className="summary-sub">Active departments</div>
-              </div>
-              <div className="summary-card" style={{ '--accent': '#388e3c' }}>
-                <div className="summary-label">Total Products</div>
-                <div className="summary-value">{totalProducts}</div>
-                <div className="summary-sub">Across all categories</div>
-              </div>
-              <div className="summary-card" style={{ '--accent': '#fb641b' }}>
-                <div className="summary-label">Total Inventory</div>
-                <div className="summary-value">{totalInventory.toLocaleString()}</div>
-                <div className="summary-sub">Units in stock</div>
-              </div>
-              <div className="summary-card" style={{ '--accent': '#9c27b0' }}>
-                <div className="summary-label">Portfolio Value</div>
-                <div className="summary-value" style={{ fontSize: '16px', paddingTop: '3px' }}>{formatINR(totalValue)}</div>
-                <div className="summary-sub">Total inventory value</div>
-              </div>
-            </div>
-          )}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="info-chip" style={{ background: 'var(--fk-blue-light)', color: 'var(--fk-blue)' }}>
+            📦 {totalProducts} products
+          </span>
+          <span className="info-chip" style={{ background: '#fff4ec', color: 'var(--fk-orange)' }}>
+            {formatINR(totalValue)} total value
+          </span>
+        </div>
+      </div>
 
-          {/* Admin notice */}
-          {isAdmin && (
-            <div className="admin-notice">
-              🔐&nbsp;<strong>Admin Mode:</strong>&nbsp;You can delete products. Delete buttons are visible only to you.
-            </div>
-          )}
+      <div className="page-body">
+        {/* Summary Cards */}
+        {categories.length > 0 && (
+          <div className="cat-summary-grid mb-20">
+            {[
+              { label: 'Total Categories', val: categories.length,               sub: 'Active departments',      icon: '🏷️', color: 'var(--fk-blue)',   bg: 'var(--fk-blue-light)' },
+              { label: 'Total Products',   val: totalProducts,                   sub: 'Across all categories',   icon: '📦', color: 'var(--success)',   bg: 'var(--success-bg)' },
+              { label: 'Total Inventory',  val: totalInventory.toLocaleString(), sub: 'Units in stock',          icon: '📊', color: 'var(--fk-orange)', bg: '#fff4ec' },
+              { label: 'Portfolio Value',  val: formatINR(totalValue),           sub: 'Total inventory value',   icon: '💰', color: '#9c27b0',          bg: '#f3e5f5', small: true },
+            ].map((s, i) => (
+              <div key={i} className="cat-summary-card">
+                <div className="cat-summary-icon" style={{ background: s.bg, color: s.color }}>{s.icon}</div>
+                <div>
+                  <div className="cat-summary-label">{s.label}</div>
+                  <div className="cat-summary-val" style={{ color: s.color, fontSize: s.small ? '1rem' : undefined }}>{s.val}</div>
+                  <div style={{ fontSize: '.65rem', color: 'var(--gray-400)', marginTop: 2 }}>{s.sub}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
-          {/* Category Sections */}
-          {categories.length === 0 ? (
-            <div className="no-categories">
-              <div style={{ fontSize: '64px', marginBottom: '20px' }}>🏷️</div>
-              <h3 style={{ color: '#9e9e9e', fontWeight: '500', margin: '0 0 8px' }}>No categories found</h3>
-              <p style={{ color: '#bdbdbd', fontSize: '13px', margin: 0 }}>Products will appear here once added.</p>
-            </div>
-          ) : (
-            categories.map(category => {
-              const meta = CATEGORY_META[category] || CATEGORY_META.other;
-              const products = productsByCategory[category] || [];
-              const catTotal = products.reduce((s, p) => s + p.price * (Number(p.inventory) || 0), 0);
-              const catUnits = products.reduce((s, p) => s + (Number(p.inventory) || 0), 0);
+        {isAdmin && (
+          <div className="alert alert-warning mb-16">
+            🔐&nbsp;<strong>Admin Mode:</strong>&nbsp;You can delete products. Delete buttons are visible only to you.
+          </div>
+        )}
 
-              return (
-                <div key={category} className="category-section">
-                  {/* Category Header */}
-                  <div
-                    className="cat-section-header"
-                    style={{ background: meta.gradient }}
-                  >
-                    <div className="cat-title-group">
-                      <span className="cat-emoji">{meta.icon}</span>
-                      <div>
-                        <div className="cat-name">
-                          {category.charAt(0).toUpperCase() + category.slice(1)}
-                        </div>
-                        <div className="cat-meta">
-                          {products.length} product{products.length !== 1 ? 's' : ''}&nbsp;•&nbsp;
-                          {catUnits.toLocaleString()} units&nbsp;•&nbsp;
-                          {formatINR(catTotal)} value
-                        </div>
+        {categories.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">🏷️</div>
+            <div className="empty-title">No categories found</div>
+            <div className="empty-desc">Products will appear here once added.</div>
+          </div>
+        ) : (
+          categories.map(category => {
+            const meta = CATEGORY_META[category] || CATEGORY_META.other;
+            const products = productsByCategory[category] || [];
+            const catTotal = products.reduce((s, p) => s + p.price * (Number(p.inventory) || 0), 0);
+            const catUnits = products.reduce((s, p) => s + (Number(p.inventory) || 0), 0);
+
+            return (
+              <div key={category} className="card mb-16" style={{ overflow: 'hidden' }}>
+                {/* Category Header */}
+                <div
+                  className="cat-section-header"
+                  style={{ background: meta.gradient, position: 'relative', overflow: 'hidden' }}
+                >
+                  <div style={{ position: 'absolute', right: -30, top: -30, width: 120, height: 120, borderRadius: '50%', background: 'rgba(255,255,255,.1)' }} />
+                  <div style={{ position: 'absolute', right: 20, bottom: -40, width: 90, height: 90, borderRadius: '50%', background: 'rgba(255,255,255,.07)' }} />
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, zIndex: 1 }}>
+                    <span style={{ fontSize: '2.2rem', lineHeight: 1, filter: 'drop-shadow(0 2px 4px rgba(0,0,0,.2))' }}>{meta.icon}</span>
+                    <div>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#fff', letterSpacing: '-.2px' }}>
+                        {category.charAt(0).toUpperCase() + category.slice(1)}
                       </div>
-                    </div>
-                    <div className="cat-badges">
-                      <div className="cat-badge">
-                        📦 {products.length}
-                      </div>
-                      <div className="cat-badge">
-                        {formatINR(catTotal)}
+                      <div style={{ fontSize: '.72rem', color: 'rgba(255,255,255,.85)', marginTop: 3 }}>
+                        {products.length} product{products.length !== 1 ? 's' : ''} · {catUnits.toLocaleString()} units · {formatINR(catTotal)}
                       </div>
                     </div>
                   </div>
 
-                  {/* Products */}
-                  {products.length === 0 ? (
-                    <div className="empty-state">
-                      <div className="empty-icon">📭</div>
-                      <p className="empty-title">No products in this category yet</p>
-                    </div>
-                  ) : (
-                    <div className="product-grid">
-                      {products.map(product => (
-                        <ProductCard
-                          key={product._id}
-                          product={product}
-                          isAdmin={isAdmin}
-                          onDeleteClick={handleDeleteClick}
-                        />
-                      ))}
-                    </div>
-                  )}
+                  <div style={{ display: 'flex', gap: 8, zIndex: 1, flexWrap: 'wrap' }}>
+                    {[`📦 ${products.length}`, formatINR(catTotal)].map((label, i) => (
+                      <span key={i} className="cat-section-count" style={{
+                        background: 'rgba(255,255,255,.2)', backdropFilter: 'blur(4px)',
+                        border: '1px solid rgba(255,255,255,.3)',
+                        color: '#fff', padding: '5px 14px', fontSize: '.7rem', fontWeight: 600
+                      }}>{label}</span>
+                    ))}
+                  </div>
                 </div>
-              );
-            })
-          )}
-        </div>
+
+                {/* Products */}
+                {products.length === 0 ? (
+                  <div className="empty-state" style={{ padding: '40px 20px' }}>
+                    <div className="empty-icon">📭</div>
+                    <div className="empty-title">No products in this category yet</div>
+                  </div>
+                ) : (
+                  <div className="product-grid">
+                    {products.map(product => (
+                      <ProductCard
+                        key={product._id}
+                        product={product}
+                        isAdmin={isAdmin}
+                        onDeleteClick={handleDeleteClick}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
       </div>
 
-      {/* Delete Confirm Modal — only rendered when admin targets a product */}
       {isAdmin && deleteTarget && (
         <DeleteModal
           product={deleteTarget}
@@ -679,9 +365,9 @@ function Categories({ token, userRole }) {
         />
       )}
 
-      {/* Toast */}
       {toast && <Toast message={toast.message} type={toast.type} />}
-    </>
+      <BackToTop />
+    </div>
   );
 }
 

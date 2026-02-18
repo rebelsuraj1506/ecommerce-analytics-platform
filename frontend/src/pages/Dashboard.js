@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import './pages.css';
 
 function Dashboard({ token, userRole }) {
   const [stats, setStats] = useState({
@@ -8,6 +9,14 @@ function Dashboard({ token, userRole }) {
   const [products, setProducts] = useState({});
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState('summary');
+
+  const [toast, setToast] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+  const showToast = (msg, type = 'info') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const isAdmin = userRole === 'admin';
   const fmt = (v) => { const n = parseFloat(v); return isNaN(n) ? '0.00' : n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
@@ -51,15 +60,18 @@ function Dashboard({ token, userRole }) {
   }, [token]);
 
   const deleteOrder = async (orderId) => {
-    if (!window.confirm('Delete this order?')) return;
     try {
       const res = await fetch(`http://localhost:8003/api/orders/${orderId}`, {
         method: 'DELETE', headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
         setStats(prev => computeStats(prev.allOrders.filter(o => o.id !== orderId)));
+        showToast('Order deleted successfully', 'success');
+      } else {
+        showToast('Failed to delete order', 'error');
       }
-    } catch (err) { alert('Error: ' + err.message); }
+    } catch (err) { showToast('Error: ' + err.message, 'error'); }
+    setDeleteConfirm(null);
   };
 
   const statusConfig = [
@@ -95,9 +107,15 @@ function Dashboard({ token, userRole }) {
           <span style={{ fontSize: '1.4rem' }}>📊</span>
           <h1 className="page-title">{isAdmin ? 'Analytics Dashboard' : 'My Dashboard'}</h1>
         </div>
-        <span style={{ fontSize: '0.78rem', color: 'var(--gray-400)' }}>
-          Auto-refreshes every 15s
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div className="dash-live-badge">
+            <div className="dash-live-dot" />
+            Live
+          </div>
+          <span style={{ fontSize: '0.78rem', color: 'var(--gray-400)' }}>
+            Auto-refreshes every 15s
+          </span>
+        </div>
       </div>
 
       <div className="page-body">
@@ -213,7 +231,7 @@ function Dashboard({ token, userRole }) {
                         </div>
                         {isAdmin && (
                           <button
-                            onClick={() => deleteOrder(order.id)}
+                            onClick={() => setDeleteConfirm(order.id)}
                             className="btn btn-danger btn-sm"
                             style={{ marginTop: 8 }}
                           >
@@ -229,6 +247,35 @@ function Dashboard({ token, userRole }) {
           )}
         </div>
       </div>
+
+      {/* Delete Confirm Modal */}
+      {deleteConfirm && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: 400 }}>
+            <div className="modal-header">
+              <span className="modal-title">Delete Order?</span>
+              <button className="modal-close" onClick={() => setDeleteConfirm(null)}>✕</button>
+            </div>
+            <div className="modal-body" style={{ textAlign: 'center', padding: '24px' }}>
+              <div style={{ fontSize: '2.8rem', marginBottom: 12 }}>🗑️</div>
+              <p style={{ fontSize: '.88rem', color: 'var(--gray-700)', lineHeight: 1.5 }}>
+                This will permanently delete order <strong>#{deleteConfirm}</strong>. This action cannot be undone.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setDeleteConfirm(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={() => deleteOrder(deleteConfirm)}>Delete Order</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className={`toast-fixed ${toast.type === 'success' ? 'toast-success' : toast.type === 'error' ? 'toast-error' : 'toast-info'}`}>
+          {toast.type === 'success' ? '✅' : toast.type === 'error' ? '❌' : 'ℹ️'} {toast.msg}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import './pages.css';
 
 function Products({ token, userRole }) {
   const [products, setProducts] = useState([]);
@@ -14,6 +15,10 @@ function Products({ token, userRole }) {
   const [loading, setLoading] = useState(true);
   const [searchQ, setSearchQ] = useState('');
   const [catFilter, setCatFilter] = useState('all');
+  const [toast, setToast] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+  const showToast = (msg, type = 'info') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
 
   const isAdmin = userRole === 'admin';
 
@@ -42,17 +47,18 @@ function Products({ token, userRole }) {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ ...formData, price: parseFloat(formData.price), inventory: parseInt(formData.inventory), images: [imageUrl] })
       });
-      if (res.ok) { setShowForm(false); setFormData({ name:'', description:'', price:'', inventory:'', category:'electronics', images:[] }); fetchProducts(); }
-      else { const d = await res.json(); alert(d.message || 'Failed to create product'); }
-    } catch (err) { alert('Error: ' + err.message); }
+      if (res.ok) { setShowForm(false); setFormData({ name:'', description:'', price:'', inventory:'', category:'electronics', images:[] }); fetchProducts(); showToast('Product created successfully', 'success'); }
+      else { const d = await res.json(); showToast(d.message || 'Failed to create product', 'error'); }
+    } catch (err) { showToast('Error: ' + err.message, 'error'); }
   };
 
-  const deleteProduct = async (id, name) => {
-    if (!window.confirm(`Delete "${name}"? This cannot be undone!`)) return;
+  const deleteProduct = async (id) => {
     try {
       const res = await fetch(`http://localhost:8002/api/products/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
-      if (res.ok) fetchProducts();
-    } catch (err) { alert('Error: ' + err.message); }
+      if (res.ok) { fetchProducts(); showToast('Product deleted', 'success'); }
+      else showToast('Failed to delete', 'error');
+    } catch (err) { showToast('Error: ' + err.message, 'error'); }
+    setDeleteConfirm(null);
   };
 
   const saveEdit = async () => {
@@ -62,13 +68,14 @@ function Products({ token, userRole }) {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ ...editingProduct, price: parseFloat(editingProduct.price), inventory: parseInt(editingProduct.inventory) })
       });
-      if (res.ok) { setEditingProduct(null); fetchProducts(); }
-    } catch (err) { alert('Error: ' + err.message); }
+      if (res.ok) { setEditingProduct(null); fetchProducts(); showToast('Product updated', 'success'); }
+      else showToast('Save failed', 'error');
+    } catch (err) { showToast('Error: ' + err.message, 'error'); }
   };
 
   const handlePlaceOrder = async () => {
     if (!shippingAddress.street || !shippingAddress.city || !shippingAddress.state || !shippingAddress.zipCode || !shippingAddress.phone) {
-      alert('Please fill in all shipping address fields'); return;
+      showToast('Please fill in all shipping address fields', 'error'); return;
     }
     setOrderLoading(true);
     try {
@@ -79,8 +86,8 @@ function Products({ token, userRole }) {
       });
       const data = await res.json();
       if (data.success) { setOrderSuccess(data.data.order); fetchProducts(); }
-      else { alert('Error: ' + (data.message || 'Failed to place order')); }
-    } catch (err) { alert('Error: ' + err.message); }
+      else { showToast('Error: ' + (data.message || 'Failed to place order'), 'error'); }
+    } catch (err) { showToast('Error: ' + err.message, 'error'); }
     finally { setOrderLoading(false); }
   };
 
@@ -302,7 +309,7 @@ function Products({ token, userRole }) {
                           ) : (
                             <>
                               <button className="btn btn-blue btn-sm w-full" onClick={() => setEditingProduct(product)}>✏️ Edit</button>
-                              <button className="btn btn-danger btn-sm w-full" onClick={() => deleteProduct(product._id, product.name)}>🗑️</button>
+                              <button className="btn btn-danger btn-sm w-full" onClick={() => setDeleteConfirm(product)}>🗑️</button>
                             </>
                           )}
                         </div>
@@ -434,6 +441,33 @@ function Products({ token, userRole }) {
               </>
             )}
           </div>
+        </div>
+      )}
+      {/* Delete Confirm Modal */}
+      {deleteConfirm && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: 400 }}>
+            <div className="modal-header">
+              <span className="modal-title">Delete Product?</span>
+              <button className="modal-close" onClick={() => setDeleteConfirm(null)}>✕</button>
+            </div>
+            <div className="modal-body" style={{ textAlign: 'center', padding: '24px' }}>
+              <div style={{ fontSize: '2.8rem', marginBottom: 12 }}>🗑️</div>
+              <p style={{ fontWeight: 700, fontSize: '.9rem', color: 'var(--gray-900)', marginBottom: 6 }}>"{deleteConfirm.name}"</p>
+              <p style={{ fontSize: '.8rem', color: 'var(--gray-500)', lineHeight: 1.5 }}>This action <strong>cannot be undone</strong>. The product will be permanently removed.</p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setDeleteConfirm(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={() => deleteProduct(deleteConfirm._id)}>Delete Product</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className={`toast-fixed ${toast.type === 'success' ? 'toast-success' : toast.type === 'error' ? 'toast-error' : 'toast-info'}`}>
+          {toast.type === 'success' ? '✅' : toast.type === 'error' ? '❌' : 'ℹ️'} {toast.msg}
         </div>
       )}
     </div>

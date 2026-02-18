@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import './pages.css';
+import BackToTop from './BackToTop';
 
 function AdminPanel({ token }) {
   const [view, setView] = useState('users'); // 'orders', 'users', 'user-details', 'add-user'
@@ -47,7 +49,7 @@ function AdminPanel({ token }) {
           headers: { 'Authorization': `Bearer ${token}` } 
         });
         const usersData = await usersRes.json();
-        console.log('Users API response:', usersData);
+
         users = usersData.data?.users || [];
       } catch (err) {
         console.error('Failed to fetch users:', err);
@@ -101,6 +103,11 @@ function AdminPanel({ token }) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    document.title = 'Admin Panel — ShopMart';
+    return () => { document.title = 'ShopMart'; };
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -1073,12 +1080,13 @@ function AdminPanel({ token }) {
                       </div>
                     </div>
                   );
-                })}
+                })}xw
               </div>
             )}
           </div>
         )}
       </div>
+      <BackToTop />
     </div>
   );
 }

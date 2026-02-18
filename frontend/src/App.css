@@ -398,19 +398,44 @@ textarea.form-control{resize:vertical;min-height:80px}
 .mt-8{margin-top:8px}.mt-16{margin-top:16px}
 .w-full{width:100%}.text-muted{color:var(--gray-500);font-size:.8rem}.text-mono{font-family:var(--font-mono)}.font-bold{font-weight:700}.font-600{font-weight:600}.text-center{text-align:center}
 
+/* ─── Focus Accessibility ────────────────────────────────────────── */
+:focus-visible{outline:2px solid var(--fk-blue);outline-offset:2px;border-radius:var(--radius-xs)}
+
+/* ─── Skeleton Loading ───────────────────────────────────────────── */
+.skeleton{background:linear-gradient(90deg,var(--gray-100) 25%,var(--gray-50) 50%,var(--gray-100) 75%);background-size:200% 100%;animation:shimmer 1.4s infinite;border-radius:var(--radius-sm)}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* ─── Selection ──────────────────────────────────────────────────── */
+::selection{background:rgba(40,116,240,.15);color:var(--gray-900)}
+
+/* ─── Section Header accent ──────────────────────────────────────── */
+.section-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.section-hdr-title{font-size:.82rem;font-weight:800;text-transform:uppercase;letter-spacing:.7px;color:var(--gray-600);display:flex;align-items:center;gap:8px}
+.section-hdr-title::before{content:'';display:block;width:3px;height:14px;background:var(--fk-blue);border-radius:2px;flex-shrink:0}
+
+/* ─── No-data banner ─────────────────────────────────────────────── */
+.no-data-banner{background:var(--gray-50);border:2px dashed var(--gray-200);border-radius:var(--radius-md);padding:40px 24px;text-align:center}
+
 /* ─── Scrollbar ──────────────────────────────────────────────────── */
-::-webkit-scrollbar{width:5px;height:5px}
-::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--gray-50)}
 ::-webkit-scrollbar-thumb{background:var(--gray-300);border-radius:3px}
 ::-webkit-scrollbar-thumb:hover{background:var(--gray-400)}
 
 /* ─── Responsive ─────────────────────────────────────────────────── */
+@media(max-width:768px){
+  .stat-grid{grid-template-columns:repeat(2,1fr)}
+  .grid-2,.grid-3{grid-template-columns:1fr}
+}
 @media(max-width:640px){
   .top-header{padding:0 12px;gap:10px}
   .header-brand-name{font-size:.95rem}
   .header-search{display:none}
-  .header-nav-link .nav-label{display:none}
+  .header-user-name{display:none}
   .sub-nav{padding:0 8px}
   .page-body{padding:14px 14px 56px}
   .product-grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
+  .stat-grid{grid-template-columns:1fr 1fr}
+  .page-header{flex-direction:column;align-items:flex-start;gap:12px}
+  .modal{margin:8px}
 }

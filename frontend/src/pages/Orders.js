@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './pages.css';
+import BackToTop from './BackToTop';
 
 const OS = {
   pending:          { label:'Order Placed',          color:'#f57c00', icon:'📋', next:['processing','cancelled'] },
@@ -30,6 +31,16 @@ export default function Orders({ token, userRole }) {
   const [cancelMod,setCancelMod]= useState(null);   // for cancel reason modal
   const [cancelReason, setCancelReason] = useState('');
   const [tracking, setTracking] = useState({ trackingNumber:'', courierName:'', estimatedDelivery:'' });
+  const [toast, setToast] = useState(null);
+  const [rejectModal, setRejectModal] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
+
+  const showToast = (msg, type = 'info') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
+
+  useEffect(() => {
+    document.title = `${userRole === 'admin' ? 'Order Management' : 'All Orders'} — ShopMart`;
+    return () => { document.title = 'ShopMart'; };
+  }, [userRole]);
 
   useEffect(() => { load(); }, [token]);
 
@@ -55,26 +66,33 @@ export default function Orders({ token, userRole }) {
         method:'PUT', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
         body: JSON.stringify({ status, ...extra })
       });
-      if (r.ok) { load(); setSelOrder(null); setTracking({ trackingNumber:'',courierName:'',estimatedDelivery:'' }); }
-      else { const d=await r.json(); alert(d.message||'Failed'); }
-    } catch(e){ alert(e.message); }
+      if (r.ok) { load(); setSelOrder(null); setTracking({ trackingNumber:'',courierName:'',estimatedDelivery:'' }); showToast('Order status updated', 'success'); }
+      else { const d=await r.json(); showToast(d.message||'Failed to update status', 'error'); }
+    } catch(e){ showToast(e.message, 'error'); }
   };
 
   const onStatusClick = (order, ns) => {
     if (ns==='shipped')   { setSelOrder({...order,pend:ns}); return; }
     if (ns==='cancelled') { setCancelMod({order}); setCancelReason(''); return; }
-    if (window.confirm(`Mark order #${order.id} as "${OS[ns]?.label}"?`)) updateStatus(order.id, ns);
+    updateStatus(order.id, ns);
   };
   const onCancelAction = async (id, action) => {
-    const ep = action==='approve'
-      ? `http://localhost:8003/api/orders/${id}/approve-cancel`
-      : `http://localhost:8003/api/orders/${id}/reject-cancel`;
-    let body={};
-    if (action==='reject') { const r=prompt('Enter rejection reason:'); if(!r) return; body.rejectionReason=r; }
+    if (action === 'reject') { setRejectModal(id); setRejectReason(''); return; }
+    const ep = `http://localhost:8003/api/orders/${id}/approve-cancel`;
     try {
-      const res = await fetch(ep,{ method:'PUT', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` }, body:JSON.stringify(body) });
-      if (res.ok) load(); else { const d=await res.json(); alert(d.message||'Error'); }
-    } catch(e){ alert(e.message); }
+      const res = await fetch(ep,{ method:'PUT', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` }, body:JSON.stringify({}) });
+      if (res.ok) { load(); showToast('Cancellation approved', 'success'); }
+      else { const d=await res.json(); showToast(d.message||'Error', 'error'); }
+    } catch(e){ showToast(e.message, 'error'); }
+  };
+  const submitReject = async () => {
+    if (!rejectReason.trim()) { showToast('Rejection reason required', 'error'); return; }
+    try {
+      const res = await fetch(`http://localhost:8003/api/orders/${rejectModal}/reject-cancel`,{ method:'PUT', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` }, body:JSON.stringify({ rejectionReason: rejectReason }) });
+      if (res.ok) { load(); showToast('Cancellation rejected', 'success'); }
+      else { const d=await res.json(); showToast(d.message||'Error', 'error'); }
+    } catch(e){ showToast(e.message, 'error'); }
+    setRejectModal(null); setRejectReason('');
   };
 
   const filtered = filter==='all' ? orders : orders.filter(o=>o.status===filter);
@@ -178,7 +196,35 @@ export default function Orders({ token, userRole }) {
             </div>
         }
 
-        {/* ── Cancel reason modal ── */}
+        {/* ── Reject cancel modal ── */}
+        {rejectModal && (
+          <div className="modal-overlay">
+            <div className="modal" style={{ maxWidth: 440 }}>
+              <div className="modal-header">
+                <div className="modal-title">Reject Cancellation</div>
+                <button className="modal-close" onClick={() => { setRejectModal(null); setRejectReason(''); }}>✕</button>
+              </div>
+              <div className="modal-body">
+                <div className="form-group">
+                  <label className="form-label">Rejection Reason *</label>
+                  <textarea className="form-control" rows={3} value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="e.g. Order already shipped, cannot cancel at this stage…" />
+                  <div className="form-text">Customer will see this reason in their order history.</div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-ghost" onClick={() => { setRejectModal(null); setRejectReason(''); }}>Back</button>
+                <button className="btn btn-danger" onClick={submitReject}>Submit Rejection</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Toast */}
+        {toast && (
+          <div className={`toast-fixed ${toast.type === 'success' ? 'toast-success' : toast.type === 'error' ? 'toast-error' : 'toast-info'}`}>
+            {toast.type === 'success' ? '✅' : toast.type === 'error' ? '❌' : 'ℹ️'} {toast.msg}
+          </div>
+        )}
         {cancelMod && (
           <div className="modal-overlay">
             <div className="modal" style={{maxWidth:460}}>
@@ -195,7 +241,7 @@ export default function Orders({ token, userRole }) {
               </div>
               <div className="modal-footer">
                 <button className="btn btn-ghost" onClick={()=>{setCancelMod(null);setCancelReason('');}}>Back</button>
-                <button className="btn btn-danger" onClick={()=>{ if(!cancelReason.trim()){alert('Reason required.');return;} updateStatus(cancelMod.order.id,'cancelled',{cancellationReason:cancelReason.trim()}); setCancelMod(null); setCancelReason(''); }}>Confirm Cancel</button>
+                <button className="btn btn-danger" onClick={()=>{ if(!cancelReason.trim()){showToast('Reason required.','error');return;} updateStatus(cancelMod.order.id,'cancelled',{cancellationReason:cancelReason.trim()}); setCancelMod(null); setCancelReason(''); }}>Confirm Cancel</button>
               </div>
             </div>
           </div>
@@ -233,12 +279,13 @@ export default function Orders({ token, userRole }) {
               </div>
               <div className="modal-footer">
                 <button className="btn btn-ghost" onClick={()=>{setSelOrder(null);setTracking({trackingNumber:'',courierName:'',estimatedDelivery:''});}}>Cancel</button>
-                <button className="btn btn-blue" onClick={()=>{ if(!tracking.trackingNumber||!tracking.courierName){alert('Tracking # and courier required.');return;} updateStatus(selOrder.id,'shipped',{...tracking,shippedAt:new Date().toISOString()}); }}>🚚 Mark as Shipped</button>
+                <button className="btn btn-blue" onClick={()=>{ if(!tracking.trackingNumber||!tracking.courierName){showToast('Tracking # and courier required.','error');return;} updateStatus(selOrder.id,'shipped',{...tracking,shippedAt:new Date().toISOString()}); }}>🚚 Mark as Shipped</button>
               </div>
             </div>
           </div>
         )}
       </div>
+      <BackToTop />
     </div>
   );
 }
