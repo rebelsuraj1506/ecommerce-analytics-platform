@@ -40,8 +40,8 @@ function Dashboard({ token, userRole }) {
     const fetchStats = async () => {
       try {
         const [ordersRes, productsRes] = await Promise.all([
-          fetch('http://localhost:8003/api/orders', { headers: { Authorization: `Bearer ${token}` } }),
-          fetch('http://localhost:8002/api/products?limit=100')
+          fetch('http://localhost:8000/api/orders', { headers: { Authorization: `Bearer ${token}` } }),
+          fetch('http://localhost:8000/api/products?limit=100')
         ]);
         const ordersData = await ordersRes.json();
         const productsData = await productsRes.json();
@@ -61,7 +61,7 @@ function Dashboard({ token, userRole }) {
 
   const deleteOrder = async (orderId) => {
     try {
-      const res = await fetch(`http://localhost:8003/api/orders/${orderId}`, {
+      const res = await fetch(`http://localhost:8000/api/orders/${orderId}`, {
         method: 'DELETE', headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -213,7 +213,7 @@ function Dashboard({ token, userRole }) {
                       />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="flex-between mb-4">
-                          <div className="order-id">Order #{order.id}</div>
+                          <div className="order-id">Order #{isAdmin ? order.id : (order.userOrderNumber || order.id)}</div>
                           <div className="flex-center gap-8">
                             <span className={getBadgeClass(order.status)}>
                               {order.status.replace(/_/g, ' ')}

@@ -45,7 +45,7 @@ function AdminPanel({ token }) {
       // Fetch users first (most important for admin)
       let users = [];
       try {
-        const usersRes = await fetch('http://localhost:8001/api/users', { 
+        const usersRes = await fetch('http://localhost:8000/api/users', { 
           headers: { 'Authorization': `Bearer ${token}` } 
         });
         const usersData = await usersRes.json();
@@ -58,7 +58,7 @@ function AdminPanel({ token }) {
       // Fetch orders
       let orders = [];
       try {
-        const ordersRes = await fetch('http://localhost:8003/api/orders', { 
+        const ordersRes = await fetch('http://localhost:8000/api/orders', { 
           headers: { 'Authorization': `Bearer ${token}` } 
         });
         const ordersData = await ordersRes.json();
@@ -70,7 +70,7 @@ function AdminPanel({ token }) {
       // Fetch pending order detail requests (admin)
       setDetailRequestsLoading(true);
       try {
-        const reqRes = await fetch('http://localhost:8003/api/orders/detail-requests/list?status=pending', {
+        const reqRes = await fetch('http://localhost:8000/api/orders/detail-requests/list?status=pending', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const reqData = await reqRes.json();
@@ -85,7 +85,7 @@ function AdminPanel({ token }) {
       // Fetch products
       let productList = [];
       try {
-        const productsRes = await fetch('http://localhost:8002/api/products?limit=100');
+        const productsRes = await fetch('http://localhost:8000/api/products?limit=100');
         const productsData = await productsRes.json();
         productList = productsData.data?.products || [];
       } catch (err) {
@@ -125,7 +125,7 @@ function AdminPanel({ token }) {
     setAddUserMessage(null);
 
     try {
-      const res = await fetch('http://localhost:8001/api/users', {
+      const res = await fetch('http://localhost:8000/api/users', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -172,7 +172,7 @@ function AdminPanel({ token }) {
     }
 
     try {
-      const res = await fetch('http://localhost:8001/api/users/all', {
+      const res = await fetch('http://localhost:8000/api/users/all', {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -197,8 +197,8 @@ function AdminPanel({ token }) {
   // ========== CANCELLATION ACTION ==========
   const handleCancellationAction = async (orderId, action) => {
     const endpoint = action === 'approve' 
-      ? `http://localhost:8003/api/orders/${orderId}/approve-cancel`
-      : `http://localhost:8003/api/orders/${orderId}/reject-cancel`;
+      ? `http://localhost:8000/api/orders/${orderId}/approve-cancel`
+      : `http://localhost:8000/api/orders/${orderId}/reject-cancel`;
     
     let body = {};
     if (action === 'reject') {
@@ -229,17 +229,21 @@ function AdminPanel({ token }) {
     }
   };
 
-  const updateDetailRequest = async (requestId, action) => {
+  const updateDetailRequest = async (requestId, action, orderInfo) => {
     const note = action === 'reject' ? prompt('Enter rejection note (optional):') : prompt('Enter approval note (optional):');
+    const confirmMsg = action === 'approve'
+      ? `Approve request #${requestId} for Order #${orderInfo?.order_id} (${orderInfo?.customerName || 'Customer'})?`
+      : `Reject request #${requestId} for Order #${orderInfo?.order_id} (${orderInfo?.customerName || 'Customer'})?`;
+    if (!window.confirm(confirmMsg)) return;
     try {
-      const res = await fetch(`http://localhost:8003/api/orders/detail-requests/${requestId}/${action}`, {
+      const res = await fetch(`http://localhost:8000/api/orders/detail-requests/${requestId}/${action}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ adminNote: note || '' })
       });
       const data = await res.json();
       if (res.ok) {
-        alert(`✅ Request ${action}d`);
+        alert(`✅ Request #${requestId} ${action}d`);
         await fetchData();
       } else {
         alert(data.message || 'Failed to update request');
@@ -265,7 +269,7 @@ function AdminPanel({ token }) {
 
     try {
       const results = await Promise.allSettled(ids.map(async (id) => {
-        const res = await fetch(`http://localhost:8003/api/orders/${id}`, {
+        const res = await fetch(`http://localhost:8000/api/orders/${id}`, {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -324,7 +328,7 @@ function AdminPanel({ token }) {
     }
 
     try {
-      const res = await fetch(`http://localhost:8001/api/users/${userId}`, {
+      const res = await fetch(`http://localhost:8000/api/users/${userId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -555,7 +559,7 @@ function AdminPanel({ token }) {
                     <div key={order.id} style={{padding: '15px', border: '1px solid #e0e0e0', borderRadius: '4px', background: order.status === 'cancel_requested' ? '#fff9e6' : '#fafafa'}}>
                       <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px'}}>
                         <div>
-                          <strong>Order #{order.id}</strong>
+                          <strong>Order #{order.id}</strong>{order.userOrderNumber && <span style={{fontSize:'11px',color:'#9e9e9e',marginLeft:6}}>· Customer's #{order.userOrderNumber}</span>}
                           <span style={{color: '#757575', fontSize: '13px', marginLeft: '10px'}}>
                             {new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                           </span>
@@ -758,13 +762,16 @@ function AdminPanel({ token }) {
               <h3 style={{margin: 0}}>User Management ({allUsers.length} Total)</h3>
               
               <div style={{display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap'}}>
-                <input 
-                  type="text"
-                  placeholder="🔍 Search by name, email, or ID..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  style={{padding: '8px 15px', border: '1px solid #e0e0e0', borderRadius: '20px', fontSize: '14px', width: '280px'}}
-                />
+                <div className="search-bar-pro" style={{ width: 280 }}>
+                  <span className="search-icon-wrap">🔍</span>
+                  <input
+                    type="text"
+                    placeholder="Search by name, email, or ID…"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  {searchQuery && <button className="search-clear-btn" onClick={() => setSearchQuery('')} title="Clear">✕</button>}
+                </div>
                 <select 
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
@@ -789,7 +796,8 @@ function AdminPanel({ token }) {
                     onClick={() => handleDeleteAllUsers(false)}
                     style={{padding: '8px 16px', background: '#ff9800', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: '500'}}
                   >
-                    🗑️ Delete All Users
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{marginRight:4}}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                    Delete All Users
                   </button>
                   <button 
                     onClick={() => handleDeleteAllUsers(true)}
@@ -925,7 +933,7 @@ function AdminPanel({ token }) {
                       <div key={r.id} style={{display: 'flex', justifyContent: 'space-between', gap: '10px', padding: '10px', background: 'white', borderRadius: '6px', border: '1px solid #f0f0f0'}}>
                         <div style={{flex: 1}}>
                           <div style={{fontSize: '12px', color: '#757575'}}>
-                            Request #{r.id} • Order #{r.order_id} • User #{r.user_id} • {new Date(r.created_at).toLocaleString()}
+                            Request #{r.id} • Order #{r.order_id} • Customer: <strong>{allUsers.find(u => u.id === r.user_id)?.name || `User #${r.user_id}`}</strong> • {new Date(r.created_at).toLocaleString()}
                           </div>
                           <div style={{fontSize: '13px', marginTop: '4px'}}>
                             <strong>Reason:</strong> {r.reason}{r.other_reason ? ` — ${r.other_reason}` : ''}
@@ -935,10 +943,10 @@ function AdminPanel({ token }) {
                           </div>
                         </div>
                         <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
-                          <button onClick={() => updateDetailRequest(r.id, 'approve')} style={{padding: '8px 12px', background: '#388e3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: '600'}}>
+                          <button onClick={() => updateDetailRequest(r.id, 'approve', { order_id: r.order_id, customerName: allUsers.find(u => u.id === r.user_id)?.name })} style={{padding: '8px 12px', background: '#388e3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: '600'}}>
                             ✅ Approve
                           </button>
-                          <button onClick={() => updateDetailRequest(r.id, 'reject')} style={{padding: '8px 12px', background: '#f44336', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: '600'}}>
+                          <button onClick={() => updateDetailRequest(r.id, 'reject', { order_id: r.order_id, customerName: allUsers.find(u => u.id === r.user_id)?.name })} style={{padding: '8px 12px', background: '#f44336', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: '600'}}>
                             ❌ Reject
                           </button>
                         </div>
@@ -1019,7 +1027,7 @@ function AdminPanel({ token }) {
                         </div>
                         <div style={{flex: 1}}>
                           <div style={{fontSize: '12px', color: '#757575', marginBottom: '5px'}}>
-                            Order #{order.id} • User: <strong>{orderUser?.name || 'Unknown'}</strong> ({orderUser?.email || ''}) • {new Date(order.createdAt).toLocaleString()}
+                            Order #{order.id}{order.userOrderNumber ? ` (Customer's #${order.userOrderNumber})` : ''} • User: <strong>{orderUser?.name || 'Unknown'}</strong> ({orderUser?.email || ''}) • {new Date(order.createdAt).toLocaleString()}
                           </div>
                           <div style={{fontWeight: '500', fontSize: '15px'}}>{product ? product.name : 'Order'}</div>
                           <div style={{fontSize: '13px', color: '#757575', marginTop: '5px'}}>

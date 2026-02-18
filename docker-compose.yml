@@ -142,6 +142,7 @@ services:
       - DB_USER=postgres
       - DB_PASSWORD=postgres
       - DB_NAME=orders_db
+      - MONGODB_URI=mongodb://mongodb:27017/orders_db
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - CORS_ORIGIN=http://localhost:3000
@@ -149,6 +150,8 @@ services:
       - PRODUCT_SERVICE_URL=http://product-service:8002
     depends_on:
       postgres:
+        condition: service_healthy
+      mongodb:
         condition: service_healthy
       redis:
         condition: service_healthy

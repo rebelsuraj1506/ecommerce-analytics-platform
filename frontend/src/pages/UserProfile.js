@@ -54,7 +54,7 @@ const UserProfile = () => {
 
   const fetchUserProfile = async () => {
     try {
-      const res = await fetch('http://localhost:8001/api/users/profile', {
+      const res = await fetch('http://localhost:8000/api/users/profile', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -73,7 +73,7 @@ const UserProfile = () => {
 
   const fetchAddresses = async () => {
     try {
-      const res = await fetch('http://localhost:8001/api/users/addresses', {
+      const res = await fetch('http://localhost:8000/api/users/addresses', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -111,7 +111,7 @@ const UserProfile = () => {
         updateData.newPassword = profileData.newPassword;
       }
 
-      const res = await fetch('http://localhost:8001/api/users/profile', {
+      const res = await fetch('http://localhost:8000/api/users/profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -149,8 +149,8 @@ const UserProfile = () => {
 
     try {
       const url = editingAddress
-        ? `http://localhost:8001/api/users/addresses/${editingAddress.id}`
-        : 'http://localhost:8001/api/users/addresses';
+        ? `http://localhost:8000/api/users/addresses/${editingAddress.id}`
+        : 'http://localhost:8000/api/users/addresses';
       
       const method = editingAddress ? 'PUT' : 'POST';
 
@@ -180,12 +180,12 @@ const UserProfile = () => {
   };
 
   const handleDeleteAddress = async (addressId) => {
-    if (!window.confirm('Are you sure you want to delete this address?')) {
+    if (!window.confirm('Delete this address? This action cannot be undone.')) {
       return;
     }
 
     try {
-      const res = await fetch(`http://localhost:8001/api/users/addresses/${addressId}`, {
+      const res = await fetch(`http://localhost:8000/api/users/addresses/${addressId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -207,7 +207,7 @@ const UserProfile = () => {
 
   const handleSetDefaultAddress = async (addressId) => {
     try {
-      const res = await fetch(`http://localhost:8001/api/users/addresses/${addressId}/default`, {
+      const res = await fetch(`http://localhost:8000/api/users/addresses/${addressId}/default`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -448,7 +448,9 @@ const UserProfile = () => {
                         <div className="addr-card-phone">📞 {address.phone}</div>
                         <div className="addr-card-footer">
                           <button className="btn btn-ghost btn-sm" onClick={() => startEditAddress(address)}>✏️ Edit</button>
-                          <button className="btn btn-danger btn-sm" onClick={() => handleDeleteAddress(address.id)}>🗑️</button>
+                          <button className="btn btn-icon btn-danger" onClick={() => handleDeleteAddress(address.id)} title="Delete address">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                          </button>
                           {!address.isDefault && (
                             <button className="btn btn-sm" style={{ background: 'var(--success-bg)', color: 'var(--success)' }} onClick={() => handleSetDefaultAddress(address.id)}>Set Default</button>
                           )}

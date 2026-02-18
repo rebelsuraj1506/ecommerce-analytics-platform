@@ -11,6 +11,10 @@ function Products({ token, userRole }) {
   const [orderSuccess, setOrderSuccess] = useState(null);
   const [shippingAddress, setShippingAddress] = useState({ street:'', city:'', state:'', zipCode:'', phone:'' });
   const [paymentMethod, setPaymentMethod] = useState('cod');
+  const [savedAddresses, setSavedAddresses] = useState([]);
+  const [selectedSavedAddr, setSelectedSavedAddr] = useState(null);
+  const [savingNewAddress, setSavingNewAddress] = useState(false);
+  const [saveAddrChecked, setSaveAddrChecked] = useState(false);
   const [formData, setFormData] = useState({ name:'', description:'', price:'', inventory:'', category:'electronics', images:[] });
   const [loading, setLoading] = useState(true);
   const [searchQ, setSearchQ] = useState('');
@@ -29,7 +33,7 @@ function Products({ token, userRole }) {
 
   const fetchProducts = () => {
     setLoading(true);
-    fetch('http://localhost:8002/api/products?limit=100')
+    fetch('http://localhost:8000/api/products?limit=100')
       .then(r => r.json())
       .then(d => { setProducts(d.data?.products || []); setLoading(false); })
       .catch(() => setLoading(false));
@@ -37,12 +41,23 @@ function Products({ token, userRole }) {
 
   useEffect(() => { fetchProducts(); }, []);
 
+  const fetchSavedAddresses = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch("http://localhost:8000/api/users/addresses", { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      if (res.ok) setSavedAddresses(data.data?.addresses || []);
+    } catch (e) { console.error(e); }
+  };
+
+  useEffect(() => { if (userRole !== "admin") fetchSavedAddresses(); }, [token]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       let imageUrl = formData.images[0];
       if (!imageUrl || imageUrl.includes('placeholder')) imageUrl = getProductImage(formData.name, formData.category);
-      const res = await fetch('http://localhost:8002/api/products', {
+      const res = await fetch('http://localhost:8000/api/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ ...formData, price: parseFloat(formData.price), inventory: parseInt(formData.inventory), images: [imageUrl] })
@@ -54,7 +69,7 @@ function Products({ token, userRole }) {
 
   const deleteProduct = async (id) => {
     try {
-      const res = await fetch(`http://localhost:8002/api/products/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`http://localhost:8000/api/products/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) { fetchProducts(); showToast('Product deleted', 'success'); }
       else showToast('Failed to delete', 'error');
     } catch (err) { showToast('Error: ' + err.message, 'error'); }
@@ -63,7 +78,7 @@ function Products({ token, userRole }) {
 
   const saveEdit = async () => {
     try {
-      const res = await fetch(`http://localhost:8002/api/products/${editingProduct._id}`, {
+      const res = await fetch(`http://localhost:8000/api/products/${editingProduct._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ ...editingProduct, price: parseFloat(editingProduct.price), inventory: parseInt(editingProduct.inventory) })
@@ -78,8 +93,9 @@ function Products({ token, userRole }) {
       showToast('Please fill in all shipping address fields', 'error'); return;
     }
     setOrderLoading(true);
+    if (saveAddrChecked) await saveNewAddressIfChecked();
     try {
-      const res = await fetch('http://localhost:8003/api/orders', {
+      const res = await fetch('http://localhost:8000/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ items: [{ productId: orderModal._id, name: orderModal.name, quantity: orderQuantity, price: orderModal.price }], paymentMethod, shippingAddress })
@@ -91,10 +107,24 @@ function Products({ token, userRole }) {
     finally { setOrderLoading(false); }
   };
 
+  const saveNewAddressIfChecked = async () => {
+    if (!saveAddrChecked || !shippingAddress.street || !shippingAddress.city || !shippingAddress.state || !shippingAddress.zipCode || !shippingAddress.phone) return;
+    setSavingNewAddress(true);
+    try {
+      await fetch('http://localhost:8000/api/users/addresses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ...shippingAddress, label: shippingAddress.city + ' Address' })
+      });
+      await fetchSavedAddresses();
+    } catch (e) { console.error(e); }
+    setSavingNewAddress(false);
+  };
+
   const closeOrderModal = () => {
     setOrderModal(null); setOrderSuccess(null); setOrderQuantity(1);
     setShippingAddress({ street:'', city:'', state:'', zipCode:'', phone:'' });
-    setPaymentMethod('cod');
+    setPaymentMethod('cod'); setSelectedSavedAddr(null); setSaveAddrChecked(false);
   };
 
   const categories = ['all', ...new Set(products.map(p => p.category).filter(Boolean))];
@@ -184,16 +214,17 @@ function Products({ token, userRole }) {
         {/* Filters */}
         <div className="card mb-16">
           <div className="card-body" style={{ padding: '14px 20px', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-            <div style={{ flex: 1, minWidth: 200, position: 'relative' }}>
-              <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--gray-400)', fontSize: '1rem' }}>🔍</span>
+            <div className="search-bar-pro" style={{ flex: 1, minWidth: 200 }}>
+              <span className="search-icon-wrap">🔍</span>
               <input
                 type="text"
-                className="form-control"
                 placeholder="Search products…"
-                style={{ paddingLeft: 32 }}
                 value={searchQ}
                 onChange={e => setSearchQ(e.target.value)}
               />
+              {searchQ && (
+                <button className="search-clear-btn" onClick={() => setSearchQ('')} title="Clear search">✕</button>
+              )}
             </div>
             <div className="filter-tabs">
               {categories.map(cat => (
@@ -309,7 +340,9 @@ function Products({ token, userRole }) {
                           ) : (
                             <>
                               <button className="btn btn-blue btn-sm w-full" onClick={() => setEditingProduct(product)}>✏️ Edit</button>
-                              <button className="btn btn-danger btn-sm w-full" onClick={() => setDeleteConfirm(product)}>🗑️</button>
+                              <button className="btn btn-icon btn-danger" onClick={() => setDeleteConfirm(product)} title="Delete product">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                              </button>
                             </>
                           )}
                         </div>
@@ -343,9 +376,9 @@ function Products({ token, userRole }) {
               <div className="success-screen">
                 <div className="success-icon">✅</div>
                 <h2 style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--brand-success)', marginBottom: 8 }}>Order Placed!</h2>
-                <p className="text-muted mb-20">Your order #{orderSuccess.id} has been confirmed.</p>
+                <p className="text-muted mb-20">Your order #{orderSuccess.userOrderNumber || orderSuccess.id} has been confirmed.</p>
                 <div className="order-summary-box mb-20" style={{ textAlign: 'left' }}>
-                  <div className="order-summary-row"><span>Order ID</span><span className="text-mono font-bold">#{orderSuccess.id}</span></div>
+                  <div className="order-summary-row"><span>Order ID</span><span className="text-mono font-bold">#{orderSuccess.userOrderNumber || orderSuccess.id}</span></div>
                   <div className="order-summary-row"><span>Amount</span><span className="font-600">₹{parseFloat(orderSuccess.totalAmount).toFixed(2)}</span></div>
                   <div className="order-summary-row"><span>Status</span><span className="font-600" style={{ textTransform: 'capitalize' }}>{orderSuccess.status}</span></div>
                   <div className="order-summary-row"><span>Payment</span><span className="font-600">{orderSuccess.paymentMethod?.toUpperCase()}</span></div>
@@ -405,18 +438,76 @@ function Products({ token, userRole }) {
 
                   {/* Shipping */}
                   <div className="form-group mb-20">
-                    <label className="form-label">📍 Shipping Address</label>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <input type="text" className="form-control" placeholder="Street Address *" value={shippingAddress.street} onChange={e => setShippingAddress({...shippingAddress, street: e.target.value})} required />
-                      <div className="grid-2">
-                        <input type="text" className="form-control" placeholder="City *" value={shippingAddress.city} onChange={e => setShippingAddress({...shippingAddress, city: e.target.value})} required />
-                        <input type="text" className="form-control" placeholder="State *" value={shippingAddress.state} onChange={e => setShippingAddress({...shippingAddress, state: e.target.value})} required />
-                      </div>
-                      <div className="grid-2">
-                        <input type="text" className="form-control" placeholder="PIN Code *" value={shippingAddress.zipCode} onChange={e => setShippingAddress({...shippingAddress, zipCode: e.target.value})} required />
-                        <input type="tel" className="form-control" placeholder="Phone *" value={shippingAddress.phone} onChange={e => setShippingAddress({...shippingAddress, phone: e.target.value})} required />
-                      </div>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: 10 }}>
+                      <label className="form-label" style={{marginBottom:0}}>📍 Shipping Address</label>
                     </div>
+
+                    {/* Saved addresses */}
+                    {savedAddresses.length > 0 && (
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--gray-500)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Saved Addresses</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {savedAddresses.map(addr => (
+                            <div
+                              key={addr.id}
+                              onClick={() => {
+                                setSelectedSavedAddr(addr.id);
+                                setShippingAddress({ street: addr.street || '', city: addr.city || '', state: addr.state || '', zipCode: addr.zipCode || addr.zip_code || '', phone: addr.phone || '' });
+                                setSaveAddrChecked(false);
+                              }}
+                              style={{
+                                border: `2px solid ${selectedSavedAddr === addr.id ? 'var(--fk-blue)' : 'var(--gray-200)'}`,
+                                borderRadius: 8,
+                                padding: '8px 12px',
+                                cursor: 'pointer',
+                                background: selectedSavedAddr === addr.id ? 'rgba(40,116,240,.05)' : '#fff',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              <div style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${selectedSavedAddr === addr.id ? 'var(--fk-blue)' : 'var(--gray-300)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                {selectedSavedAddr === addr.id && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--fk-blue)' }} />}
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--gray-900)' }}>
+                                  {addr.label || addr.city} {addr.isDefault && <span style={{ fontSize: '0.65rem', background: 'var(--fk-blue)', color: '#fff', borderRadius: 4, padding: '1px 5px', marginLeft: 4 }}>Default</span>}
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--gray-500)' }}>{[addr.street, addr.city, addr.state, addr.zipCode || addr.zip_code].filter(Boolean).join(', ')}{addr.phone && ` · ${addr.phone}`}</div>
+                              </div>
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => { setSelectedSavedAddr(null); setShippingAddress({ street:'', city:'', state:'', zipCode:'', phone:'' }); }}
+                            style={{ background: 'none', border: '2px dashed var(--gray-300)', borderRadius: 8, padding: '7px 12px', cursor: 'pointer', fontSize: '0.8rem', color: 'var(--gray-500)', textAlign: 'left', transition: 'border-color 0.15s' }}
+                          >
+                            + Enter a new address
+                          </button>
+                        </div>
+                        {selectedSavedAddr && <div style={{ marginTop: 10, borderTop: '1px solid var(--gray-100)', paddingTop: 10, fontSize: '0.78rem', color: 'var(--gray-500)' }}>Delivering to selected address above</div>}
+                      </div>
+                    )}
+
+                    {/* Manual entry — shown when no saved addr selected or no saved addrs */}
+                    {(!selectedSavedAddr) && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <input type="text" className="form-control" placeholder="Street Address *" value={shippingAddress.street} onChange={e => setShippingAddress({...shippingAddress, street: e.target.value})} required />
+                        <div className="grid-2">
+                          <input type="text" className="form-control" placeholder="City *" value={shippingAddress.city} onChange={e => setShippingAddress({...shippingAddress, city: e.target.value})} required />
+                          <input type="text" className="form-control" placeholder="State *" value={shippingAddress.state} onChange={e => setShippingAddress({...shippingAddress, state: e.target.value})} required />
+                        </div>
+                        <div className="grid-2">
+                          <input type="text" className="form-control" placeholder="PIN Code *" value={shippingAddress.zipCode} onChange={e => setShippingAddress({...shippingAddress, zipCode: e.target.value})} required />
+                          <input type="tel" className="form-control" placeholder="Phone *" value={shippingAddress.phone} onChange={e => setShippingAddress({...shippingAddress, phone: e.target.value})} required />
+                        </div>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8rem', color: 'var(--gray-600)', cursor: 'pointer', marginTop: 2 }}>
+                          <input type="checkbox" checked={saveAddrChecked} onChange={e => setSaveAddrChecked(e.target.checked)} style={{ width: 15, height: 15, accentColor: 'var(--fk-blue)' }} />
+                          Save this address to my profile
+                        </label>
+                      </div>
+                    )}
                   </div>
 
                   {/* Summary */}

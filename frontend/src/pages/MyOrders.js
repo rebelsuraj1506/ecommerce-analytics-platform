@@ -44,10 +44,15 @@ const DETAIL_REASONS = [
 
 export default function MyOrders({ token, userId, userName }) {
   const [orders,   setOrders]   = useState([]);
+  const [deletedOrders, setDeletedOrders] = useState([]);
   const [products, setProducts] = useState({});
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState(null);
   const [expandedTracking, setExpandedTracking] = useState(null);
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [restoreModal, setRestoreModal] = useState(null);
+  const [restoreReason, setRestoreReason] = useState('');
+  const [restoreSubmitting, setRestoreSubmitting] = useState(false);
 
   /* Cancel modal state */
   const [cancelModal,  setCancelModal]  = useState(null);
@@ -76,11 +81,11 @@ export default function MyOrders({ token, userId, userName }) {
     return () => { document.title = 'ShopMart'; };
   }, []);
 
-  useEffect(() => { fetchProducts(); fetchOrders(); }, [token, userId]);
+  useEffect(() => { fetchProducts(); fetchOrders(); fetchDeletedOrders(); }, [token, userId]);
 
   const fetchProducts = async () => {
     try {
-      const r = await fetch('http://localhost:8002/api/products?limit=100');
+      const r = await fetch('http://localhost:8000/api/products?limit=100');
       const d = await r.json();
       const m = {}; (d.data?.products||[]).forEach(p=>{m[p._id]=p;});
       setProducts(m);
@@ -90,7 +95,7 @@ export default function MyOrders({ token, userId, userName }) {
   const fetchOrders = async () => {
     if (!userId) { setError('User ID missing — please log out and log in again.'); setLoading(false); return; }
     try {
-      const r = await fetch('http://localhost:8003/api/orders',{ headers:{ Authorization:`Bearer ${token}` } });
+      const r = await fetch('http://localhost:8000/api/orders',{ headers:{ Authorization:`Bearer ${token}` } });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const d = await r.json();
       const all = d.data?.orders||[];
@@ -101,13 +106,39 @@ export default function MyOrders({ token, userId, userName }) {
     finally { setLoading(false); }
   };
 
+  const fetchDeletedOrders = async () => {
+    if (!token) return;
+    try {
+      const r = await fetch('http://localhost:8000/api/orders/deleted', { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) {
+        const d = await r.json();
+        setDeletedOrders(d.data?.orders || []);
+      }
+    } catch(e) { console.error(e); }
+  };
+
+  const handleRestoreRequest = async () => {
+    if (!restoreModal || restoreReason.trim().length < 10) { alert('Please provide a reason (min 10 characters).'); return; }
+    setRestoreSubmitting(true);
+    try {
+      const r = await fetch(`http://localhost:8000/api/orders/${restoreModal.id}/restore-request`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ reason: restoreReason.trim() })
+      });
+      const d = await r.json();
+      if (r.ok) { alert('✅ Restoration request submitted! Admin will review shortly.'); setRestoreModal(null); setRestoreReason(''); fetchDeletedOrders(); }
+      else alert(d.message || 'Failed');
+    } catch(e) { alert(e.message); }
+    setRestoreSubmitting(false);
+  };
+
   /* ── Cancel request ── */
   const handleCancelRequest = async orderId => {
     if (!cancelData.reason) return alert('Please select a reason.');
     if (cancelData.reason==='Other (Please specify)' && !cancelData.customReason.trim()) return alert('Please provide a reason.');
     const reason = cancelData.reason==='Other (Please specify)' ? cancelData.customReason : cancelData.reason;
     try {
-      const r = await fetch(`http://localhost:8003/api/orders/${orderId}/cancel-request`,{
+      const r = await fetch(`http://localhost:8000/api/orders/${orderId}/cancel-request`,{
         method:'POST', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
         body: JSON.stringify({ reason, images:cancelData.images.filter(x=>x.trim()) })
       });
@@ -120,7 +151,7 @@ export default function MyOrders({ token, userId, userName }) {
   const handleSubmitReview = async () => {
     if (!reviewModal) return; setReviewSubmitting(true);
     try {
-      const r = await fetch(`http://localhost:8003/api/orders/${reviewModal.orderId}/review`,{
+      const r = await fetch(`http://localhost:8000/api/orders/${reviewModal.orderId}/review`,{
         method:'POST', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
         body: JSON.stringify({ productId:reviewModal.productId, rating:reviewRating, comment:reviewComment.trim(), userName:userName||'User' })
       });
@@ -138,7 +169,7 @@ export default function MyOrders({ token, userId, userName }) {
     const finalReason = `${returnData.primaryReason}${returnData.subReason?' – '+returnData.subReason:''}`;
     const note = returnData.customReason.trim();
     try {
-      const r = await fetch(`http://localhost:8003/api/orders/${returnModal.order.id}/cancel-request`,{
+      const r = await fetch(`http://localhost:8000/api/orders/${returnModal.order.id}/cancel-request`,{
         method:'POST', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
         body: JSON.stringify({ reason:note?`${finalReason}: ${note}`:finalReason, returnType:returnData.type, images:returnData.images.filter(x=>x.trim()) })
       });
@@ -148,10 +179,10 @@ export default function MyOrders({ token, userId, userName }) {
   };
 
   /* ── Detail request ── */
-  const openDetailRequest = async orderId => {
-    setDetailModal({orderId}); setDetailReason(''); setDetailOther(''); setDetailInfo(null);
+  const openDetailRequest = async (orderId, userOrderNumber) => {
+    setDetailModal({orderId, userOrderNumber}); setDetailReason(''); setDetailOther(''); setDetailInfo(null);
     try {
-      const r = await fetch(`http://localhost:8003/api/orders/${orderId}/detail-request`,{ headers:{ Authorization:`Bearer ${token}` } });
+      const r = await fetch(`http://localhost:8000/api/orders/${orderId}/detail-request`,{ headers:{ Authorization:`Bearer ${token}` } });
       const d = await r.json();
       if (r.ok) setDetailInfo(d.data?.request||null);
     } catch(e){ console.error(e); }
@@ -161,7 +192,7 @@ export default function MyOrders({ token, userId, userName }) {
     if (detailReason==='Other'&&!detailOther.trim()) return alert('Please enter your reason.');
     setDetailSubmitting(true);
     try {
-      const r = await fetch(`http://localhost:8003/api/orders/${detailModal.orderId}/detail-request`,{
+      const r = await fetch(`http://localhost:8000/api/orders/${detailModal.orderId}/detail-request`,{
         method:'POST', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
         body: JSON.stringify({ reason:detailReason, otherReason:detailOther })
       });
@@ -193,17 +224,21 @@ export default function MyOrders({ token, userId, userName }) {
         ) : orders.map(order => {
           const firstItem = order.items?.[0];
           const product   = firstItem ? products[firstItem.product_id||firstItem.productId] : null;
-          const si        = OS[order.status]||{ label:order.status, color:'#757575', icon:'📦', canCancel:false };
+          // For deleted orders with approved access, show last known status instead of 'deleted'
+          const displayStatus = (order.status === 'deleted' && order.canViewDetails && order.statusBeforeDeletion)
+            ? order.statusBeforeDeletion
+            : order.status;
+          const si        = OS[displayStatus]||{ label:displayStatus, color:'#757575', icon:'📦', canCancel:false };
           const imgUrl    = product?.images?.[0]||`https://placehold.co/84x84/eeeeee/9e9e9e?text=Order`;
           const addr      = getAddr(order.shippingAddress);
-          const isCancelState = CANCEL_STATES.includes(order.status);
+          const isCancelState = CANCEL_STATES.includes(displayStatus);
           const SEVEN_DAYS    = 7*24*60*60*1000;
-          const isWithin7Days = order.status==='delivered' && order.deliveredAt && (Date.now()-new Date(order.deliveredAt).getTime())<=SEVEN_DAYS;
+          const isWithin7Days = displayStatus==='delivered' && order.deliveredAt && (Date.now()-new Date(order.deliveredAt).getTime())<=SEVEN_DAYS;
           const daysLeft      = isWithin7Days ? Math.ceil((SEVEN_DAYS-(Date.now()-new Date(order.deliveredAt).getTime()))/(24*60*60*1000)) : 0;
-          const canCancel     = (si.canCancel && !['cancelled','delivered','refunded'].includes(order.status)) || isWithin7Days;
+          const canCancel     = (si.canCancel && !['cancelled','delivered','refunded'].includes(displayStatus)) || isWithin7Days;
           const expanded      = expandedTracking===order.id;
 
-          const curStepIdx = STEP_KEYS.indexOf(order.status);
+          const curStepIdx = STEP_KEYS.indexOf(displayStatus);
 
           return (
             <div key={order.id} className={`my-order-card${order.status==='cancel_requested'?' flagged':''}`}>
@@ -211,8 +246,11 @@ export default function MyOrders({ token, userId, userName }) {
               {/* ── Card header ── */}
               <div className="my-order-head">
                 <div>
-                  <div className="my-order-id">Order #{order.id}</div>
+                  <div className="my-order-id">Order #{order.userOrderNumber || order.id}</div>
                   <div className="my-order-date">{new Date(order.createdAt).toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'})}</div>
+                  {order.status === 'deleted' && order.canViewDetails && (
+                    <div style={{fontSize:'0.7rem',color:'#9e9e9e',marginTop:2}}>🗑️ Deleted order · details restored by admin</div>
+                  )}
                 </div>
                 <span className="status-pill" style={{background:si.color}}>{si.icon} {si.label}</span>
               </div>
@@ -295,7 +333,7 @@ export default function MyOrders({ token, userId, userName }) {
               )}
 
               {/* ── Review items (delivered) ── */}
-              {order.status==='delivered' && order.items?.length>0 && (
+              {displayStatus==='delivered' && order.items?.length>0 && (
                 <div className="review-items-wrap">
                   <div className="review-items-title">⭐ Rate your purchase:</div>
                   {order.items.map((item,idx) => {
@@ -336,7 +374,7 @@ export default function MyOrders({ token, userId, userName }) {
                 )}
 
                 {!order.canViewDetails && order.canRequestDetails && (
-                  <button className="btn btn-sm" style={{background:'#673ab7',color:'#fff'}} onClick={()=>openDetailRequest(order.id)}>📄 Request Details</button>
+                  <button className="btn btn-sm" style={{background:'#673ab7',color:'#fff'}} onClick={()=>openDetailRequest(order.id, order.userOrderNumber)}>📄 Request Details</button>
                 )}
               </div>
 
@@ -350,7 +388,7 @@ export default function MyOrders({ token, userId, userName }) {
         <div className="modal-overlay">
           <div className="modal" style={{maxWidth:580}}>
             <div className="modal-header" style={{background:'linear-gradient(135deg,#c62828,#e53935)',borderRadius:'var(--radius-lg) var(--radius-lg) 0 0'}}>
-              <div><div className="modal-title" style={{color:'#fff'}}>🚫 Cancel Order #{cancelModal.id}</div><div style={{fontSize:'.72rem',color:'rgba(255,255,255,.8)',marginTop:3}}>Please select a reason for cancellation</div></div>
+              <div><div className="modal-title" style={{color:'#fff'}}>🚫 Cancel Order #{cancelModal.userOrderNumber || cancelModal.id}</div><div style={{fontSize:'.72rem',color:'rgba(255,255,255,.8)',marginTop:3}}>Please select a reason for cancellation</div></div>
               <button className="modal-close" style={{background:'rgba(255,255,255,.15)',color:'#fff'}} onClick={()=>{setCancelModal(null);setCancelData({reason:'',customReason:'',images:[]});}}>✕</button>
             </div>
             <div className="modal-body" style={{maxHeight:'62vh',overflowY:'auto'}}>
@@ -376,7 +414,7 @@ export default function MyOrders({ token, userId, userName }) {
                   {cancelData.images.map((img,i) => (
                     <div key={i} className="image-url-row">
                       <input type="url" className="form-control" placeholder="Paste image URL" value={img} onChange={e=>{const a=[...cancelData.images];a[i]=e.target.value;setCancelData({...cancelData,images:a});}}/>
-                      <button className="image-url-del" onClick={()=>setCancelData({...cancelData,images:cancelData.images.filter((_,x)=>x!==i)})}>🗑️</button>
+                      <button className="image-url-del" onClick={()=>setCancelData({...cancelData,images:cancelData.images.filter((_,x)=>x!==i)})}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg></button>
                     </div>
                   ))}
                 </div>
@@ -433,7 +471,7 @@ export default function MyOrders({ token, userId, userName }) {
         <div className="modal-overlay">
           <div className="modal" style={{maxWidth:600}}>
             <div className="modal-header" style={{background:returnData.type==='replace'?'linear-gradient(135deg,#1565c0,#1976d2)':'linear-gradient(135deg,#c62828,#e53935)',borderRadius:'var(--radius-lg) var(--radius-lg) 0 0'}}>
-              <div><div className="modal-title" style={{color:'#fff'}}>{returnData.type==='replace'?'🔄 Request Replacement':'↩️ Return & Refund'}</div><div style={{fontSize:'.72rem',color:'rgba(255,255,255,.8)',marginTop:3}}>Order #{returnModal.order.id}</div></div>
+              <div><div className="modal-title" style={{color:'#fff'}}>{returnData.type==='replace'?'🔄 Request Replacement':'↩️ Return & Refund'}</div><div style={{fontSize:'.72rem',color:'rgba(255,255,255,.8)',marginTop:3}}>Order #{returnModal.order.userOrderNumber || returnModal.order.id}</div></div>
               <button className="modal-close" style={{background:'rgba(255,255,255,.15)',color:'#fff'}} onClick={()=>setReturnModal(null)}>✕</button>
             </div>
             <div className="modal-body" style={{maxHeight:'65vh',overflowY:'auto'}}>
@@ -480,7 +518,7 @@ export default function MyOrders({ token, userId, userName }) {
                   {returnData.images.map((img,i) => (
                     <div key={i} className="image-url-row">
                       <input type="url" className="form-control" placeholder="Paste image URL" value={img} onChange={e=>{const a=[...returnData.images];a[i]=e.target.value;setReturnData({...returnData,images:a});}}/>
-                      <button className="image-url-del" onClick={()=>setReturnData({...returnData,images:returnData.images.filter((_,x)=>x!==i)})}>🗑️</button>
+                      <button className="image-url-del" onClick={()=>setReturnData({...returnData,images:returnData.images.filter((_,x)=>x!==i)})}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg></button>
                     </div>
                   ))}
                 </div>
@@ -510,7 +548,7 @@ export default function MyOrders({ token, userId, userName }) {
               <button className="modal-close" onClick={()=>setDetailModal(null)}>✕</button>
             </div>
             <div className="modal-body">
-              <div className="form-text mb-14">Order #{detailModal.orderId} · Requests are reviewed within 30 days and require admin approval.</div>
+              <div className="form-text mb-14">Order #{detailModal.userOrderNumber ? `#${detailModal.userOrderNumber}` : `#${detailModal.orderId}`} · Requests are reviewed within 30 days and require admin approval.</div>
               {detailInfo && (
                 <div className="detail-request-card mb-14">
                   <div className="detail-request-title">Latest Request Status: {detailInfo.status}</div>
@@ -535,6 +573,167 @@ export default function MyOrders({ token, userId, userName }) {
             <div className="modal-footer">
               <button className="btn btn-ghost" onClick={()=>setDetailModal(null)}>Close</button>
               <button className="btn btn-blue" onClick={submitDetailRequest} disabled={detailSubmitting}>{detailSubmitting?'Submitting…':'Submit Request'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════ DELETED ORDERS ═══════════════════ */}
+      {deletedOrders.length > 0 && (
+        <div className="my-orders-wrap" style={{ marginTop: 24 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
+            <h2 style={{ fontSize:'1rem', fontWeight:700, color:'var(--gray-700)', margin:0 }}>🗑️ Deleted Orders</h2>
+            <span style={{ fontSize:'.72rem', background:'var(--gray-200)', color:'var(--gray-600)', borderRadius:12, padding:'2px 9px', fontWeight:600 }}>{deletedOrders.length}</span>
+            <button className="btn btn-ghost btn-sm" style={{marginLeft:'auto'}} onClick={()=>setShowDeleted(s=>!s)}>
+              {showDeleted ? '▲ Hide' : '▼ Show'}
+            </button>
+          </div>
+          {showDeleted && deletedOrders.map(order => {
+            const statusKey = order.statusBeforeDeletion || order.status;
+            const si = OS[statusKey] || { label: statusKey, color:'#757575', icon:'📦' };
+            const daysLeft = order.deletionExpiresAt ? Math.max(0, Math.ceil((new Date(order.deletionExpiresAt) - Date.now()) / (24*60*60*1000))) : 0;
+            const firstItem = order.items?.[0];
+            const product = firstItem ? products[firstItem.product_id||firstItem.productId] : null;
+            const imgUrl = product?.images?.[0] || `https://placehold.co/72x72/eeeeee/9e9e9e?text=Del`;
+            const adminApproved = order.canViewDetails;
+            return (
+              <div key={order.id} style={{
+                background: adminApproved ? 'linear-gradient(135deg,#f3e5ff,#ede7f6)' : 'var(--gray-50)',
+                border: adminApproved ? '1.5px solid #ce93d8' : '1.5px dashed var(--gray-300)',
+                borderRadius: 14, marginBottom: 12, overflow: 'hidden',
+                boxShadow: adminApproved ? '0 2px 12px rgba(103,58,183,0.10)' : 'none',
+                opacity: adminApproved ? 1 : 0.82,
+              }}>
+                {/* Card Header */}
+                <div style={{
+                  background: adminApproved ? 'linear-gradient(135deg,#7b1fa2,#9c27b0)' : 'var(--gray-200)',
+                  padding: '10px 16px', display:'flex', justifyContent:'space-between', alignItems:'center'
+                }}>
+                  <div>
+                    <div style={{ fontWeight:700, fontSize:'.9rem', color: adminApproved ? '#fff' : 'var(--gray-700)' }}>
+                      Order #{order.userOrderNumber || order.id}
+                    </div>
+                    <div style={{ fontSize:'.7rem', color: adminApproved ? 'rgba(255,255,255,0.78)' : 'var(--gray-400)', marginTop:2 }}>
+                      {adminApproved
+                        ? '✅ Admin restored access · details visible below'
+                        : <>🗑️ Deleted {order.deletedAt ? new Date(order.deletedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}) : ''}
+                           {daysLeft > 0 ? ` · ${daysLeft}d left to restore` : ' · Restoration expired'}</>
+                      }
+                    </div>
+                  </div>
+                  <div style={{ textAlign:'right' }}>
+                    <div style={{ fontSize:'.65rem', color: adminApproved ? 'rgba(255,255,255,0.65)' : 'var(--gray-400)', marginBottom:3 }}>Last status</div>
+                    <span className="status-pill" style={{ background:si.color, fontSize:'.7rem' }}>{si.icon} {si.label}</span>
+                  </div>
+                </div>
+
+                {/* Card Body */}
+                <div style={{ padding:'14px 16px' }}>
+                  <div style={{ display:'flex', gap:12, alignItems:'center', marginBottom: adminApproved ? 12 : 0 }}>
+                    <img src={imgUrl} alt="p" style={{ width:54, height:54, objectFit:'cover', borderRadius:10, border:'2px solid', borderColor: adminApproved ? '#ce93d8' : 'var(--gray-200)' }} onError={e=>{e.target.src='https://placehold.co/54x54/eee/999?text=Img';}}/>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontWeight:700, fontSize:'.85rem', color:'var(--gray-800)' }}>{product?.name||(firstItem?.name||'Product')}</div>
+                      <div style={{ fontSize:'.76rem', color:'var(--gray-500)', marginTop:2 }}>
+                        ₹{parseFloat(order.totalAmount||0).toFixed(2)} · Qty {firstItem?.quantity||1}
+                        {order.paymentMethod && <> · {order.paymentMethod.toUpperCase()}</>}
+                      </div>
+                      {order.createdAt && (
+                        <div style={{ fontSize:'.7rem', color:'var(--gray-400)', marginTop:2 }}>
+                          Placed {new Date(order.createdAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Admin-restored detail strip */}
+                  {adminApproved && (
+                    <div style={{
+                      background:'rgba(255,255,255,0.65)', borderRadius:10, padding:'10px 14px',
+                      border:'1px solid rgba(156,39,176,0.18)', display:'flex', flexDirection:'column', gap:5
+                    }}>
+                      <div style={{ fontSize:'.72rem', fontWeight:700, color:'#6a1b9a', marginBottom:2, letterSpacing:'.03em' }}>
+                        🔓 Restored Order Details
+                      </div>
+                      {order.shippingAddress && (() => {
+                        const a = typeof order.shippingAddress === 'string'
+                          ? (() => { try { return JSON.parse(order.shippingAddress); } catch { return {}; } })()
+                          : (order.shippingAddress || {});
+                        const line = [a.street, a.city, a.state].filter(Boolean).join(', ') + (a.zipCode ? ` – ${a.zipCode}` : '');
+                        return line ? (
+                          <div style={{ fontSize:'.76rem', color:'var(--gray-600)' }}>📍 {line}{a.phone ? ` · 📞 ${a.phone}` : ''}</div>
+                        ) : null;
+                      })()}
+                      {order.trackingNumber && (
+                        <div style={{ fontSize:'.76rem', color:'var(--gray-600)' }}>🚚 {order.courierName} · #{order.trackingNumber}</div>
+                      )}
+                      <div style={{ fontSize:'.72rem', color:'#9e9e9e', marginTop:3, fontStyle:'italic' }}>
+                        This order was deleted. Admin approved access to your order history.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Restore request button or status */}
+                  {!adminApproved && (
+                    <div style={{ marginTop:10 }}>
+                      {daysLeft > 0 && !order.restorationRequested && (
+                        <button className="btn btn-sm" style={{ background:'#673ab7', color:'#fff', fontSize:'.75rem' }}
+                          onClick={() => { setRestoreModal(order); setRestoreReason(''); }}>
+                          🔄 Request Restoration
+                        </button>
+                      )}
+                      {order.restorationRequested && (
+                        <div style={{
+                          display:'inline-flex', alignItems:'center', gap:6, fontSize:'.75rem',
+                          background: order.restorationStatus==='rejected' ? '#fff3e0' : '#f3e5f5',
+                          color: order.restorationStatus==='rejected' ? '#e65100' : '#6a1b9a',
+                          borderRadius:8, padding:'5px 10px', border:'1px solid',
+                          borderColor: order.restorationStatus==='rejected' ? '#ffcc80' : '#ce93d8'
+                        }}>
+                          {order.restorationStatus==='pending' ? '⏳' : order.restorationStatus==='rejected' ? '❌' : '✅'}
+                          &nbsp;Restoration {order.restorationStatus==='pending'?'pending admin review':order.restorationStatus}
+                          {order.restorationStatus==='rejected'&&order.restorationRejectionReason?` — ${order.restorationRejectionReason}`:''}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ═══════════════════ RESTORE REQUEST MODAL ═══════════════════ */}
+      {restoreModal && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: 460 }}>
+            <div className="modal-header" style={{ background:'linear-gradient(135deg,#5e35b1,#7b1fa2)', borderRadius:'var(--radius-lg) var(--radius-lg) 0 0' }}>
+              <div>
+                <div className="modal-title" style={{ color:'#fff' }}>🔄 Request Order Restoration</div>
+                <div style={{ fontSize:'.72rem', color:'rgba(255,255,255,.8)', marginTop:3 }}>Order #{restoreModal.userOrderNumber || restoreModal.id}</div>
+              </div>
+              <button className="modal-close" style={{ background:'rgba(255,255,255,.15)', color:'#fff' }} onClick={()=>setRestoreModal(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ background:'var(--gray-50)', borderRadius:10, padding:'12px 14px', marginBottom:14, display:'flex', gap:10, alignItems:'center' }}>
+                <div>
+                  <div style={{ fontSize:'.8rem', fontWeight:600, color:'var(--gray-700)' }}>Last status before deletion</div>
+                  <div style={{ marginTop:4 }}>
+                    {(() => { const si2 = OS[restoreModal.statusBeforeDeletion||restoreModal.status]||{label:restoreModal.status,color:'#757575',icon:'📦'}; return <span className="status-pill" style={{ background:si2.color }}>{si2.icon} {si2.label}</span>; })()}
+                  </div>
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Why do you need to restore this order? *</label>
+                <textarea className="form-control" rows={4} value={restoreReason} onChange={e=>setRestoreReason(e.target.value)} placeholder="Please provide a detailed reason (min 10 characters)…"/>
+                <div className="form-text">Admin will review your request and restore the order if approved.</div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={()=>setRestoreModal(null)}>Cancel</button>
+              <button className="btn" style={{ background:'#673ab7', color:'#fff' }} onClick={handleRestoreRequest} disabled={restoreSubmitting}>
+                {restoreSubmitting ? 'Submitting…' : '🔄 Submit Request'}
+              </button>
             </div>
           </div>
         </div>

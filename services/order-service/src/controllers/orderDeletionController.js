@@ -17,6 +17,7 @@ exports.softDeleteOrder = async (req, res) => {
     }
 
     // Add soft delete fields to order
+    order.statusBeforeDeletion = order.status;
     order.isDeleted = true;
     order.deletedAt = new Date();
     order.deletedBy = userId;

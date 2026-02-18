@@ -125,8 +125,10 @@ function ProductCard({ product, isAdmin, onDeleteClick }) {
               <button
                 className="btn btn-danger btn-sm w-full"
                 onClick={() => onDeleteClick(product)}
+                style={{ display:'flex', alignItems:'center', gap:6, justifyContent:'center' }}
               >
-                🗑️ Delete Product
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                Delete Product
               </button>
             </div>
           )}
@@ -154,8 +156,8 @@ function Categories({ token, userRole }) {
   const fetchData = async () => {
     try {
       const [catRes, prodRes] = await Promise.all([
-        fetch('http://localhost:8002/api/categories'),
-        fetch('http://localhost:8002/api/products?limit=100'),
+        fetch('http://localhost:8000/api/categories'),
+        fetch('http://localhost:8000/api/products?limit=100'),
       ]);
       const catData = await catRes.json();
       const prodData = await prodRes.json();
@@ -192,7 +194,7 @@ function Categories({ token, userRole }) {
     if (!isAdmin || !deleteTarget) return;
     setDeleteLoading(true);
     try {
-      const res = await fetch(`http://localhost:8002/api/products/${deleteTarget._id}`, {
+      const res = await fetch(`http://localhost:8000/api/products/${deleteTarget._id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` },
       });

@@ -35,10 +35,10 @@ const rateLimiter = async (req, res, next) => {
     const requests = await redis.incr(key);
     
     if (requests === 1) {
-      await redis.expire(key, 900); // 15 minutes
+      await redis.expire(key, 60); // 1 minute window
     }
     
-    const maxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100;
+    const maxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 500;
     
     if (requests > maxRequests) {
       return res.status(429).json({
@@ -111,9 +111,9 @@ const proxyRequest = async (serviceUrl, path, method, data, headers) => {
 
 // Route handlers
 // User Service routes
-app.all('/api/auth/*', async (req, res) => {
+app.all('/api/auth*', async (req, res) => {
   try {
-    const path = req.path.replace('/api/auth', '/api/auth');
+    const path = `${req.path}${req.url.includes('?') ? '?' + req.url.split('?')[1] : ''}`;
     const data = await proxyRequest(SERVICES.USER, path, req.method, req.body, req.headers);
     res.json(data);
   } catch (error) {
@@ -121,9 +121,9 @@ app.all('/api/auth/*', async (req, res) => {
   }
 });
 
-app.all('/api/users/*', async (req, res) => {
+app.all('/api/users*', async (req, res) => {
   try {
-    const path = req.path.replace('/api/users', '/api/users');
+    const path = `${req.path}${req.url.includes('?') ? '?' + req.url.split('?')[1] : ''}`;
     const data = await proxyRequest(SERVICES.USER, path, req.method, req.body, req.headers);
     res.json(data);
   } catch (error) {
@@ -144,7 +144,7 @@ app.all('/api/products*', async (req, res) => {
 
 app.all('/api/categories*', async (req, res) => {
   try {
-    const path = req.path.replace('/api/categories', '/api/categories');
+    const path = `${req.path}${req.url.includes('?') ? '?' + req.url.split('?')[1] : ''}`;
     const data = await proxyRequest(SERVICES.PRODUCT, path, req.method, req.body, req.headers);
     res.json(data);
   } catch (error) {

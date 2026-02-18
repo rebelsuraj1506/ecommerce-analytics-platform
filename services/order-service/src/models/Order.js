@@ -127,6 +127,7 @@ const orderSchema = new mongoose.Schema({
   deletedAt: Date,
   deletedBy: Number,
   deletionExpiresAt: Date, // 30 days after deletion
+  statusBeforeDeletion: String, // last status snapshot before deletion
   
   // Restoration Request Fields
   restorationRequested: {

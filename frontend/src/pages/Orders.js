@@ -27,6 +27,7 @@ export default function Orders({ token, userRole }) {
   const [users,    setUsers]    = useState({});
   const [loading,  setLoading]  = useState(true);
   const [filter,   setFilter]   = useState('all');
+  const [searchQ, setSearchQ] = useState('');
   const [selOrder, setSelOrder] = useState(null);   // for shipping modal
   const [cancelMod,setCancelMod]= useState(null);   // for cancel reason modal
   const [cancelReason, setCancelReason] = useState('');
@@ -47,14 +48,19 @@ export default function Orders({ token, userRole }) {
   const load = async () => {
     try {
       const [oR,pR,uR] = await Promise.all([
-        fetch('http://localhost:8003/api/orders',{ headers:{ Authorization:`Bearer ${token}` } }),
-        fetch('http://localhost:8002/api/products?limit=100'),
-        fetch('http://localhost:8001/api/users',{ headers:{ Authorization:`Bearer ${token}` } }),
+        fetch('http://localhost:8000/api/orders',{ headers:{ Authorization:`Bearer ${token}` } }),
+        fetch('http://localhost:8000/api/products?limit=100'),
+        fetch('http://localhost:8000/api/users?limit=1000',{ headers:{ Authorization:`Bearer ${token}` } }),
       ]);
       const [oD,pD,uD] = await Promise.all([oR.json(),pR.json(),uR.json()]);
       const pMap={}, uMap={};
       (pD.data?.products||[]).forEach(p=>{pMap[p._id]=p;});
-      (uD.data?.users||[]).forEach(u=>{uMap[u.id]=u;});
+      // Store users by multiple key formats to handle type mismatches
+      (uD.data?.users||[]).forEach(u=>{
+        uMap[u.id]=u;
+        uMap[String(u.id)]=u;
+        uMap[Number(u.id)]=u;
+      });
       setProducts(pMap); setUsers(uMap);
       setOrders((oD.data?.orders||[]).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)));
     } catch(e){ console.error(e); } finally { setLoading(false); }
@@ -62,7 +68,7 @@ export default function Orders({ token, userRole }) {
 
   const updateStatus = async (id, status, extra={}) => {
     try {
-      const r = await fetch(`http://localhost:8003/api/orders/${id}/status`,{
+      const r = await fetch(`http://localhost:8000/api/orders/${id}/status`,{
         method:'PUT', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
         body: JSON.stringify({ status, ...extra })
       });
@@ -78,7 +84,7 @@ export default function Orders({ token, userRole }) {
   };
   const onCancelAction = async (id, action) => {
     if (action === 'reject') { setRejectModal(id); setRejectReason(''); return; }
-    const ep = `http://localhost:8003/api/orders/${id}/approve-cancel`;
+    const ep = `http://localhost:8000/api/orders/${id}/approve-cancel`;
     try {
       const res = await fetch(ep,{ method:'PUT', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` }, body:JSON.stringify({}) });
       if (res.ok) { load(); showToast('Cancellation approved', 'success'); }
@@ -88,14 +94,14 @@ export default function Orders({ token, userRole }) {
   const submitReject = async () => {
     if (!rejectReason.trim()) { showToast('Rejection reason required', 'error'); return; }
     try {
-      const res = await fetch(`http://localhost:8003/api/orders/${rejectModal}/reject-cancel`,{ method:'PUT', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` }, body:JSON.stringify({ rejectionReason: rejectReason }) });
+      const res = await fetch(`http://localhost:8000/api/orders/${rejectModal}/reject-cancel`,{ method:'PUT', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` }, body:JSON.stringify({ rejectionReason: rejectReason }) });
       if (res.ok) { load(); showToast('Cancellation rejected', 'success'); }
       else { const d=await res.json(); showToast(d.message||'Error', 'error'); }
     } catch(e){ showToast(e.message, 'error'); }
     setRejectModal(null); setRejectReason('');
   };
 
-  const filtered = filter==='all' ? orders : orders.filter(o=>o.status===filter);
+  const filtered = orders.filter(o => (filter==='all' || o.status===filter) && (!searchQ || String(o.id).includes(searchQ) || (users[o.userId]?.name||'').toLowerCase().includes(searchQ.toLowerCase())));
   const counts   = { total:orders.length, pending:orders.filter(o=>o.status==='pending').length, processing:orders.filter(o=>o.status==='processing').length, delivered:orders.filter(o=>o.status==='delivered').length, cancelReq:orders.filter(o=>o.status==='cancel_requested').length };
   const FILTER_KEYS = ['all','pending','processing','shipped','out_for_delivery','delivered','cancel_requested','cancelled','refunded'];
 
@@ -122,7 +128,17 @@ export default function Orders({ token, userRole }) {
 
         {/* Filters */}
         <div className="card mb-16">
-          <div className="card-body" style={{padding:'10px 14px'}}>
+          <div className="card-body" style={{padding:'10px 14px', display:'flex', flexDirection:'column', gap:10}}>
+            <div className="search-bar-pro" style={{ maxWidth: 340 }}>
+              <span className="search-icon-wrap">🔍</span>
+              <input
+                type="text"
+                placeholder="Search by order ID or customer…"
+                value={searchQ}
+                onChange={e => setSearchQ(e.target.value)}
+              />
+              {searchQ && <button className="search-clear-btn" onClick={() => setSearchQ('')} title="Clear">✕</button>}
+            </div>
             <div className="filter-tabs">
               {FILTER_KEYS.map(s => (
                 <button key={s} className={`filter-tab${filter===s?' active':''}`} onClick={()=>setFilter(s)}>
@@ -141,7 +157,7 @@ export default function Orders({ token, userRole }) {
               {filtered.map(order => {
                 const item    = order.items?.[0];
                 const product = item ? products[item.product_id||item.productId] : null;
-                const user    = users[order.userId];
+                const user    = users[order.userId] || users[String(order.userId)] || users[Number(order.userId)];
                 const si      = OS[order.status];
                 const addr    = parseAddr(order.shippingAddress);
                 const isCancel= order.status==='cancel_requested';
@@ -150,9 +166,15 @@ export default function Orders({ token, userRole }) {
                     {/* head */}
                     <div className="order-card-head">
                       <div>
-                        <div className="order-card-num">Order #{order.id}</div>
+                        <div className="order-card-num">Order #{order.id}
+                          {order.userOrderNumber && (
+                            <span style={{fontSize:'.65rem',fontWeight:500,color:'var(--gray-400)',marginLeft:7,letterSpacing:0}}>
+                              Customer's #{order.userOrderNumber}
+                            </span>
+                          )}
+                        </div>
                         <div className="order-card-meta">
-                          Customer: <strong>{user?.name||'Unknown'}</strong>
+                          Customer: <strong>{user?.name || `User #${order.userId}` || 'Unknown'}</strong>
                           &nbsp;·&nbsp;
                           {new Date(order.createdAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}
                         </div>

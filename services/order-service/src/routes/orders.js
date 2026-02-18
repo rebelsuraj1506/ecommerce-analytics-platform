@@ -97,7 +97,7 @@ router.get('/', [
     // Get orders with all tracking fields
     const ordersQuery = `
       SELECT 
-        id, user_id, total_amount, status, payment_method, 
+        id, user_id, user_order_number, total_amount, status, payment_method, 
         shipping_address, created_at, updated_at,
         processing_at, shipped_at, out_for_delivery_at, delivered_at,
         tracking_number, courier_name, estimated_delivery,
@@ -160,6 +160,7 @@ router.get('/', [
       return {
         id: order.id,
         userId: order.user_id,
+        userOrderNumber: order.user_order_number,
         totalAmount: parseFloat(order.total_amount),
         status: order.status,
         paymentMethod: order.payment_method,
@@ -271,9 +272,13 @@ router.post('/', [
     const totalAmount = items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
 
     // Insert order (inventory_deducted = true since we deducted above)
+    // Also compute this user's sequential order number atomically
     const orderQuery = `
-      INSERT INTO orders (user_id, total_amount, payment_method, shipping_address, status, inventory_deducted)
-      VALUES ($1, $2, $3, $4, 'pending', true)
+      INSERT INTO orders (user_id, total_amount, payment_method, shipping_address, status, inventory_deducted, user_order_number)
+      VALUES (
+        $1, $2, $3, $4, 'pending', true,
+        (SELECT COALESCE(MAX(user_order_number), 0) + 1 FROM orders WHERE user_id = $1)
+      )
       RETURNING *
     `;
     const orderResult = await client.query(orderQuery, [userId, totalAmount, paymentMethod, JSON.stringify(shippingAddress)]);
@@ -308,6 +313,7 @@ router.post('/', [
         order: {
           id: order.id,
           userId: order.user_id,
+          userOrderNumber: order.user_order_number,
           totalAmount: parseFloat(order.total_amount),
           status: order.status,
           paymentMethod: order.payment_method,

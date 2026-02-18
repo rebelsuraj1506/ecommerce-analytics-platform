@@ -68,7 +68,7 @@ export const AuthProvider = ({ children }) => {
   // Login function
   const login = async (email, password, loginType = 'user') => {
     try {
-      const res = await fetch('http://localhost:8001/api/auth/login', {
+      const res = await fetch('http://localhost:8000/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
@@ -105,7 +105,7 @@ export const AuthProvider = ({ children }) => {
   // Register function
   const register = async (name, email, password, role = 'customer') => {
     try {
-      const res = await fetch('http://localhost:8001/api/auth/register', {
+      const res = await fetch('http://localhost:8000/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password, role })
@@ -135,7 +135,7 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       if (token) {
-        await fetch('http://localhost:8001/api/auth/logout', {
+        await fetch('http://localhost:8000/api/auth/logout', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`
@@ -160,7 +160,7 @@ export const AuthProvider = ({ children }) => {
     try {
       if (!token) return false;
 
-      const res = await fetch('http://localhost:8001/api/auth/refresh', {
+      const res = await fetch('http://localhost:8000/api/auth/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token })

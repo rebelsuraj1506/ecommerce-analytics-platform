@@ -86,11 +86,27 @@ const connectDB = async () => {
       // Soft-delete + retention / access-control for order details
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`,
       `ALTER TABLE orders ADD COLUMN IF NOT EXISTS deleted_by INTEGER`,
-      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS deletion_reason TEXT`
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS deletion_reason TEXT`,
+      // Per-user sequential order number (starts at 1 for each user's first order)
+      `ALTER TABLE orders ADD COLUMN IF NOT EXISTS user_order_number INTEGER`
     ];
+
+    // First, add all the columns
     for (const sql of alterColumns) {
       await client.query(sql);
     }
+
+    // Then backfill user_order_number for any existing orders that don't have it yet
+    await client.query(`
+      UPDATE orders o
+      SET user_order_number = sub.rn
+      FROM (
+        SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at ASC, id ASC) AS rn
+        FROM orders
+        WHERE user_order_number IS NULL
+      ) sub
+      WHERE o.id = sub.id
+    `);
 
     // Order detail requests (user requests details within 30 days; admin approves/rejects)
     await client.query(`
