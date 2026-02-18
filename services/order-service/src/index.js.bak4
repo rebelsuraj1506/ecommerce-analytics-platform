@@ -4,19 +4,19 @@ const cors = require('cors');
 const helmet = require('helmet');
 const logger = require('./utils/logger');
 const { connectDB } = require('./config/database');
+const { connectMongoDB } = require('./config/mongodb');
 const { connectRedis } = require('./config/redis');
 
 // Import routes
-const authRoutes = require('./routes/auth');
-const userRoutes = require('./routes/users');
-const profileRoutes = require('./routes/profile');
+const orderRoutes = require('./routes/orders');
+const orderDeletionRoutes = require('./routes/orderDeletion');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
 const requestLogger = require('./middleware/requestLogger');
 
 const app = express();
-const PORT = process.env.PORT || 8001;
+const PORT = process.env.PORT || 8003;
 
 // Middleware
 app.use(helmet());
@@ -32,16 +32,15 @@ app.use(requestLogger);
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'healthy',
-    service: 'user-service',
+    service: 'order-service',
     timestamp: new Date().toISOString(),
     uptime: process.uptime()
   });
 });
 
 // API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/users', profileRoutes);
-app.use('/api/users', userRoutes);
+app.use('/api/orders', orderRoutes);
+app.use('/api/orders', orderDeletionRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -51,22 +50,23 @@ app.use((req, res) => {
   });
 });
 
-// Error handler (must be last)
+// Error handler
 app.use(errorHandler);
 
 // Start server
 const startServer = async () => {
   try {
-    // Connect to MySQL
     await connectDB();
-    logger.info('MySQL database connected successfully');
+    logger.info('PostgreSQL database connected successfully');
 
-    // Connect to Redis
     await connectRedis();
     logger.info('Redis connected successfully');
 
+    // Initialize cleanup job
+    require('./jobs/cleanup');
+
     app.listen(PORT, () => {
-      logger.info(`User Service running on port ${PORT}`);
+      logger.info(`Order Service running on port ${PORT}`);
       logger.info(`Environment: ${process.env.NODE_ENV}`);
     });
   } catch (error) {
@@ -75,13 +75,11 @@ const startServer = async () => {
   }
 };
 
-// Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
   logger.error('Unhandled Promise Rejection:', err);
   process.exit(1);
 });
 
-// Handle SIGTERM
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received. Shutting down gracefully...');
   process.exit(0);

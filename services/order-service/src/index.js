@@ -4,10 +4,12 @@ const cors = require('cors');
 const helmet = require('helmet');
 const logger = require('./utils/logger');
 const { connectDB } = require('./config/database');
+const { connectMongoDB } = require('./config/mongodb');
 const { connectRedis } = require('./config/redis');
 
 // Import routes
 const orderRoutes = require('./routes/orders');
+const orderDeletionRoutes = require('./routes/orderDeletion');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -38,6 +40,7 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api/orders', orderRoutes);
+app.use('/api/orders', orderDeletionRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -56,8 +59,14 @@ const startServer = async () => {
     await connectDB();
     logger.info('PostgreSQL database connected successfully');
 
+    await connectMongoDB();
+    logger.info('MongoDB connected successfully');
+
     await connectRedis();
     logger.info('Redis connected successfully');
+
+    // Initialize cleanup job
+    require('./jobs/cleanup');
 
     app.listen(PORT, () => {
       logger.info(`Order Service running on port ${PORT}`);

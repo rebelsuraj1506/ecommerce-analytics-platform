@@ -25,9 +25,6 @@
     "winston": "^3.11.0",
     "redis": "^4.6.12",
     "axios": "^1.6.5",
-    "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.0.3",
-    "node-cron": "^3.0.3",
     "pg": "^8.11.3",
     "pg-hstore": "^2.3.4"
   },

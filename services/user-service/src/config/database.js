@@ -52,6 +52,26 @@ const connectDB = async () => {
       )
     `);
 
+    // Create user_addresses table if not exists
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS user_addresses (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        label VARCHAR(100) NOT NULL,
+        street TEXT NOT NULL,
+        city VARCHAR(100) NOT NULL,
+        state VARCHAR(100) NOT NULL,
+        zip_code VARCHAR(20) NOT NULL,
+        country VARCHAR(100) DEFAULT 'India',
+        phone VARCHAR(20) NOT NULL,
+        is_default BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        INDEX idx_user_id (user_id)
+      )
+    `);
+
     connection.release();
     logger.info('Database tables initialized');
     

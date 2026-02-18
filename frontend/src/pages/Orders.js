@@ -1,675 +1,239 @@
 import React, { useState, useEffect } from 'react';
+import './pages.css';
 
-function Orders({ token, userRole }) {
-  const [orders, setOrders] = useState([]);
+const OS = {
+  pending:          { label:'Order Placed',          color:'#f57c00', icon:'📋', next:['processing','cancelled'] },
+  processing:       { label:'Processing',             color:'#1565c0', icon:'⚙️',  next:['shipped','cancelled'] },
+  shipped:          { label:'Shipped',                color:'#4527a0', icon:'🚚', next:['out_for_delivery','cancelled'] },
+  out_for_delivery: { label:'Out for Delivery',       color:'#bf360c', icon:'🚛', next:['delivered','cancelled'] },
+  delivered:        { label:'Delivered',              color:'#2e7d32', icon:'✅', next:[] },
+  cancel_requested: { label:'Cancel Requested',       color:'#e65100', icon:'⏳', next:['cancelled','processing'] },
+  cancelled:        { label:'Cancelled',              color:'#c62828', icon:'❌', next:['refund_processing'] },
+  refund_processing:{ label:'Refund Processing',      color:'#6a1b9a', icon:'💰', next:['refunded'] },
+  refunded:         { label:'Refunded',               color:'#2e7d32', icon:'✅', next:[] },
+};
+const parseAddr = a => {
+  if (!a) return {};
+  const obj = typeof a==='string' ? (() => { try{return JSON.parse(a);}catch{return {};} })() : a;
+  const parts = [obj.street,obj.city,obj.state].filter(Boolean);
+  return { line:parts.length?parts.join(', ')+(obj.zipCode?` – ${obj.zipCode}`:''):null, phone:obj.phone||null };
+};
+const fmt = v => { const n=parseFloat(v); return isNaN(n)?'0.00':n.toFixed(2); };
+
+export default function Orders({ token, userRole }) {
+  const [orders,   setOrders]   = useState([]);
   const [products, setProducts] = useState({});
-  const [users, setUsers] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [selectedOrder, setSelectedOrder] = useState(null);
-  const [cancelModal, setCancelModal] = useState(null); // { order, pendingStatus }
+  const [users,    setUsers]    = useState({});
+  const [loading,  setLoading]  = useState(true);
+  const [filter,   setFilter]   = useState('all');
+  const [selOrder, setSelOrder] = useState(null);   // for shipping modal
+  const [cancelMod,setCancelMod]= useState(null);   // for cancel reason modal
   const [cancelReason, setCancelReason] = useState('');
-  const [trackingDetails, setTrackingDetails] = useState({
-    trackingNumber: '',
-    courierName: '',
-    estimatedDelivery: ''
-  });
+  const [tracking, setTracking] = useState({ trackingNumber:'', courierName:'', estimatedDelivery:'' });
 
-  const formatPrice = (value) => {
-    const num = parseFloat(value);
-    return isNaN(num) ? '0.00' : num.toFixed(2);
-  };
+  useEffect(() => { load(); }, [token]);
 
-  const getShippingDisplay = (addr) => {
-    if (!addr) return { line: null, phone: null };
-    const a = typeof addr === 'string' ? (() => { try { return JSON.parse(addr); } catch { return null; } })() : addr;
-    if (!a || typeof a !== 'object') return { line: null, phone: null };
-    const parts = [a.street, a.city, a.state].filter(Boolean);
-    const zip = a.zipCode ? ` - ${a.zipCode}` : '';
-    return { line: parts.length ? parts.join(', ') + zip : null, phone: a.phone || null };
-  };
-
-  // Order statuses with their transitions
-  const orderStatuses = {
-    pending: { 
-      label: 'Order Placed', 
-      color: '#ffc107', 
-      icon: '📋',
-      nextStates: ['processing', 'cancelled']
-    },
-    processing: { 
-      label: 'Processing', 
-      color: '#17a2b8', 
-      icon: '⚙️',
-      nextStates: ['shipped', 'cancelled']
-    },
-    shipped: { 
-      label: 'Shipped', 
-      color: '#2874f0', 
-      icon: '🚚',
-      nextStates: ['out_for_delivery', 'cancelled']
-    },
-    out_for_delivery: { 
-      label: 'Out for Delivery', 
-      color: '#ff9800', 
-      icon: '🚛',
-      nextStates: ['delivered', 'cancelled']
-    },
-    delivered: { 
-      label: 'Delivered', 
-      color: '#388e3c', 
-      icon: '✅',
-      nextStates: []
-    },
-    cancel_requested: { 
-      label: 'Cancellation Requested', 
-      color: '#ff9800', 
-      icon: '⏳',
-      nextStates: ['cancelled', 'processing']
-    },
-    cancelled: { 
-      label: 'Cancelled', 
-      color: '#f44336', 
-      icon: '❌',
-      nextStates: ['refund_processing']
-    },
-    refund_processing: { 
-      label: 'Refund Processing', 
-      color: '#9c27b0', 
-      icon: '💰',
-      nextStates: ['refunded']
-    },
-    refunded: { 
-      label: 'Refunded', 
-      color: '#4caf50', 
-      icon: '✅',
-      nextStates: []
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-  }, [token]);
-
-  const fetchData = async () => {
+  const load = async () => {
     try {
-      const [ordersRes, productsRes, usersRes] = await Promise.all([
-        fetch('http://localhost:8003/api/orders', { 
-          headers: { 'Authorization': `Bearer ${token}` } 
-        }),
+      const [oR,pR,uR] = await Promise.all([
+        fetch('http://localhost:8003/api/orders',{ headers:{ Authorization:`Bearer ${token}` } }),
         fetch('http://localhost:8002/api/products?limit=100'),
-        fetch('http://localhost:8001/api/users', { 
-          headers: { 'Authorization': `Bearer ${token}` } 
-        })
+        fetch('http://localhost:8001/api/users',{ headers:{ Authorization:`Bearer ${token}` } }),
       ]);
-
-      const ordersData = await ordersRes.json();
-      const productsData = await productsRes.json();
-      const usersData = await usersRes.json();
-      
-      const ordersList = ordersData.data?.orders || [];
-      const productsList = productsData.data?.products || [];
-      const usersList = usersData.data?.users || [];
-      
-      // Create product map
-      const productMap = {};
-      productsList.forEach(p => { productMap[p._id] = p; });
-      setProducts(productMap);
-
-      // Create user map
-      const userMap = {};
-      usersList.forEach(u => { userMap[u.id] = u; });
-      setUsers(userMap);
-
-      // Sort orders by most recent
-      ordersList.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      
-      setOrders(ordersList);
-      setLoading(false);
-    } catch (err) {
-      console.error('Error fetching data:', err);
-      setLoading(false);
-    }
+      const [oD,pD,uD] = await Promise.all([oR.json(),pR.json(),uR.json()]);
+      const pMap={}, uMap={};
+      (pD.data?.products||[]).forEach(p=>{pMap[p._id]=p;});
+      (uD.data?.users||[]).forEach(u=>{uMap[u.id]=u;});
+      setProducts(pMap); setUsers(uMap);
+      setOrders((oD.data?.orders||[]).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)));
+    } catch(e){ console.error(e); } finally { setLoading(false); }
   };
 
-  const updateOrderStatus = async (orderId, newStatus, additionalData = {}) => {
+  const updateStatus = async (id, status, extra={}) => {
     try {
-      const res = await fetch(`http://localhost:8003/api/orders/${orderId}/status`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          status: newStatus,
-          ...additionalData
-        })
+      const r = await fetch(`http://localhost:8003/api/orders/${id}/status`,{
+        method:'PUT', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
+        body: JSON.stringify({ status, ...extra })
       });
-
-      if (res.ok) {
-        alert(`✅ Order status updated to: ${orderStatuses[newStatus]?.label}`);
-        fetchData(); // Refresh orders
-        setSelectedOrder(null);
-        setTrackingDetails({ trackingNumber: '', courierName: '', estimatedDelivery: '' });
-      } else {
-        const data = await res.json();
-        alert('Error: ' + (data.message || 'Failed to update status'));
-      }
-    } catch (err) {
-      alert('Error: ' + err.message);
-    }
+      if (r.ok) { load(); setSelOrder(null); setTracking({ trackingNumber:'',courierName:'',estimatedDelivery:'' }); }
+      else { const d=await r.json(); alert(d.message||'Failed'); }
+    } catch(e){ alert(e.message); }
   };
 
-  const handleStatusUpdate = (order, newStatus) => {
-    // If shipping, ask for tracking details
-    if (newStatus === 'shipped') {
-      setSelectedOrder({ ...order, pendingStatus: newStatus });
-      return;
-    }
-
-    // Admin cancellation requires a mandatory reason
-    if (newStatus === 'cancelled') {
-      setCancelModal({ order, pendingStatus: newStatus });
-      setCancelReason('');
-      return;
-    }
-
-    // Confirm status change
-    const confirmMessage = `Update order #${order.id} status to "${orderStatuses[newStatus]?.label}"?`;
-    if (window.confirm(confirmMessage)) {
-      updateOrderStatus(order.id, newStatus);
-    }
+  const onStatusClick = (order, ns) => {
+    if (ns==='shipped')   { setSelOrder({...order,pend:ns}); return; }
+    if (ns==='cancelled') { setCancelMod({order}); setCancelReason(''); return; }
+    if (window.confirm(`Mark order #${order.id} as "${OS[ns]?.label}"?`)) updateStatus(order.id, ns);
   };
-
-  const handleCancelSubmit = () => {
-    if (!cancelReason.trim()) {
-      alert('A cancellation reason is required.');
-      return;
-    }
-    updateOrderStatus(cancelModal.order.id, 'cancelled', { cancellationReason: cancelReason.trim() });
-    setCancelModal(null);
-    setCancelReason('');
-  };
-
-  const handleShippingSubmit = () => {
-    if (!trackingDetails.trackingNumber || !trackingDetails.courierName) {
-      alert('Please provide tracking number and courier name');
-      return;
-    }
-
-    updateOrderStatus(selectedOrder.id, 'shipped', {
-      trackingNumber: trackingDetails.trackingNumber,
-      courierName: trackingDetails.courierName,
-      estimatedDelivery: trackingDetails.estimatedDelivery,
-      shippedAt: new Date().toISOString()
-    });
-  };
-
-  const handleCancellationAction = async (orderId, action) => {
-    const endpoint = action === 'approve' 
-      ? `http://localhost:8003/api/orders/${orderId}/approve-cancel`
-      : `http://localhost:8003/api/orders/${orderId}/reject-cancel`;
-    
-    let body = {};
-    if (action === 'reject') {
-      const reason = prompt('Enter rejection reason:');
-      if (!reason) return;
-      body.rejectionReason = reason;
-    }
-
+  const onCancelAction = async (id, action) => {
+    const ep = action==='approve'
+      ? `http://localhost:8003/api/orders/${id}/approve-cancel`
+      : `http://localhost:8003/api/orders/${id}/reject-cancel`;
+    let body={};
+    if (action==='reject') { const r=prompt('Enter rejection reason:'); if(!r) return; body.rejectionReason=r; }
     try {
-      const res = await fetch(endpoint, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(body)
-      });
-
-      if (res.ok) {
-        alert(action === 'approve' ? '✅ Cancellation approved and refund initiated!' : '❌ Cancellation request rejected!');
-        fetchData();
-      } else {
-        const data = await res.json();
-        alert('Error: ' + (data.message || 'Action failed'));
-      }
-    } catch (err) {
-      alert('Error: ' + err.message);
-    }
+      const res = await fetch(ep,{ method:'PUT', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` }, body:JSON.stringify(body) });
+      if (res.ok) load(); else { const d=await res.json(); alert(d.message||'Error'); }
+    } catch(e){ alert(e.message); }
   };
 
-  const filteredOrders = filterStatus === 'all' 
-    ? orders 
-    : orders.filter(o => o.status === filterStatus);
+  const filtered = filter==='all' ? orders : orders.filter(o=>o.status===filter);
+  const counts   = { total:orders.length, pending:orders.filter(o=>o.status==='pending').length, processing:orders.filter(o=>o.status==='processing').length, delivered:orders.filter(o=>o.status==='delivered').length, cancelReq:orders.filter(o=>o.status==='cancel_requested').length };
+  const FILTER_KEYS = ['all','pending','processing','shipped','out_for_delivery','delivered','cancel_requested','cancelled','refunded'];
 
-  const stats = {
-    total: orders.length,
-    pending: orders.filter(o => o.status === 'pending').length,
-    processing: orders.filter(o => o.status === 'processing').length,
-    shipped: orders.filter(o => o.status === 'shipped').length,
-    delivered: orders.filter(o => o.status === 'delivered').length,
-    cancelled: orders.filter(o => o.status === 'cancelled').length,
-    cancelRequested: orders.filter(o => o.status === 'cancel_requested').length
-  };
-
-  if (loading) {
-    return (
-      <div className="page-wrap">
-        <div className="spinner-wrap">
-          <div className="spinner" />
-          <span className="text-muted">Loading orders…</span>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div className="page-wrap"><div className="spinner-wrap"><div className="spinner"/><span className="text-muted">Loading orders…</span></div></div>;
 
   return (
     <div className="page-wrap">
-      {/* Header */}
       <div className="page-header">
         <div className="page-title-row">
-          <span style={{fontSize: '1.4rem'}}>{userRole === 'admin' ? '🛍️' : '📦'}</span>
-          <h1 className="page-title">{userRole === 'admin' ? 'Order Management' : 'All Orders'}</h1>
-          <span className="page-count">{filteredOrders.length}</span>
+          <h1 className="page-title">{userRole==='admin'?'Order Management':'All Orders'}</h1>
+          <span className="page-count">{filtered.length}</span>
         </div>
       </div>
 
       <div className="page-body">
-        {/* Stats Cards */}
+        {/* KPI */}
         <div className="stat-grid mb-20">
-          <div className="stat-card c-primary">
-            <div className="stat-icon">🛒</div>
-            <div className="stat-label">Total Orders</div>
-            <div className="stat-value">{stats.total}</div>
-          </div>
-          <div className="stat-card c-warning">
-            <div className="stat-icon">📋</div>
-            <div className="stat-label">Pending</div>
-            <div className="stat-value">{stats.pending}</div>
-          </div>
-          <div className="stat-card c-primary">
-            <div className="stat-icon">⚙️</div>
-            <div className="stat-label">Processing</div>
-            <div className="stat-value">{stats.processing}</div>
-          </div>
-          <div className="stat-card c-success">
-            <div className="stat-icon">✅</div>
-            <div className="stat-label">Delivered</div>
-            <div className="stat-value">{stats.delivered}</div>
-          </div>
-          {stats.cancelRequested > 0 && (
-            <div className="stat-card c-danger">
-              <div className="stat-icon">⚠️</div>
-              <div className="stat-label">Cancel Requests</div>
-              <div className="stat-value">{stats.cancelRequested}</div>
-            </div>
-          )}
+          <div className="stat-card c-primary"><div className="stat-icon">🛒</div><div className="stat-label">Total</div><div className="stat-value">{counts.total}</div></div>
+          <div className="stat-card c-warning"><div className="stat-icon">📋</div><div className="stat-label">Pending</div><div className="stat-value">{counts.pending}</div></div>
+          <div className="stat-card c-primary"><div className="stat-icon">⚙️</div><div className="stat-label">Processing</div><div className="stat-value">{counts.processing}</div></div>
+          <div className="stat-card c-success"><div className="stat-icon">✅</div><div className="stat-label">Delivered</div><div className="stat-value">{counts.delivered}</div></div>
+          {counts.cancelReq>0 && <div className="stat-card c-danger"><div className="stat-icon">⚠️</div><div className="stat-label">Cancel Requests</div><div className="stat-value">{counts.cancelReq}</div></div>}
         </div>
 
         {/* Filters */}
         <div className="card mb-16">
-          <div className="card-body" style={{padding: '14px 20px'}}>
-            <div className="form-label mb-8">Filter by Status</div>
+          <div className="card-body" style={{padding:'10px 14px'}}>
             <div className="filter-tabs">
-              {['all', 'pending', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancel_requested', 'cancelled', 'refunded'].map(status => {
-                const count = status === 'all' ? orders.length : orders.filter(o => o.status === status).length;
-                return (
-                  <button
-                    key={status}
-                    className={`filter-tab${filterStatus === status ? ' active' : ''}`}
-                    onClick={() => setFilterStatus(status)}
-                  >
-                    {status.replace(/_/g, ' ')} ({count})
-                  </button>
-                );
-              })}
+              {FILTER_KEYS.map(s => (
+                <button key={s} className={`filter-tab${filter===s?' active':''}`} onClick={()=>setFilter(s)}>
+                  {s==='all'?'All':s.replace(/_/g,' ')}
+                  <span style={{fontSize:'.65rem',marginLeft:4,opacity:.7}}>({s==='all'?orders.length:orders.filter(o=>o.status===s).length})</span>
+                </button>
+              ))}
             </div>
           </div>
         </div>
 
-        {/* Orders List */}
-        <div>
-          {filteredOrders.length === 0 ? (
-            <div className="card"><div className="empty-state">
-              <div className="empty-icon">📦</div>
-              <div className="empty-title">No orders found</div>
-              <div className="empty-desc">Try changing the status filter above</div>
-            </div></div>
-          ) : (
-            <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
-              {filteredOrders.map(order => {
-                const firstItem = order.items?.[0];
-                const product = firstItem ? products[firstItem.product_id || firstItem.productId] : null;
-                const user = users[order.userId];
-                const statusInfo = orderStatuses[order.status];
-                const canUpdateStatus = userRole === 'admin';
-
+        {/* Order cards */}
+        {filtered.length===0
+          ? <div className="card"><div className="empty-state"><div className="empty-icon">📦</div><div className="empty-title">No orders</div><div className="empty-desc">Try a different filter</div></div></div>
+          : <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              {filtered.map(order => {
+                const item    = order.items?.[0];
+                const product = item ? products[item.product_id||item.productId] : null;
+                const user    = users[order.userId];
+                const si      = OS[order.status];
+                const addr    = parseAddr(order.shippingAddress);
+                const isCancel= order.status==='cancel_requested';
                 return (
-                  <div key={order.id} style={{
-                    border: order.status === 'cancel_requested' ? '2px solid #ff9800' : '1px solid #e0e0e0',
-                    borderRadius: '8px',
-                    overflow: 'hidden',
-                    background: order.status === 'cancel_requested' ? '#fff9e6' : 'white'
-                  }}>
-                    {/* Order Header */}
-                    <div style={{
-                      padding: '15px 20px',
-                      background: '#fafafa',
-                      borderBottom: '1px solid #e0e0e0',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      flexWrap: 'wrap',
-                      gap: '10px'
-                    }}>
+                  <div key={order.id} className={`order-card${isCancel?' cancel-flag':''}`}>
+                    {/* head */}
+                    <div className="order-card-head">
                       <div>
-                        <div style={{fontSize: '14px', fontWeight: '500', color: '#212121', marginBottom: '5px'}}>
-                          Order #{order.id}
-                        </div>
-                        <div style={{fontSize: '12px', color: '#757575'}}>
-                          Customer: <strong>{user?.name || 'Unknown'}</strong> • 
-                          Placed: {new Date(order.createdAt).toLocaleDateString('en-IN', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
+                        <div className="order-card-num">Order #{order.id}</div>
+                        <div className="order-card-meta">
+                          Customer: <strong>{user?.name||'Unknown'}</strong>
+                          &nbsp;·&nbsp;
+                          {new Date(order.createdAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}
                         </div>
                       </div>
-                      <div style={{
-                        padding: '6px 16px',
-                        borderRadius: '20px',
-                        fontSize: '12px',
-                        fontWeight: '500',
-                        color: 'white',
-                        background: statusInfo?.color || '#757575',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '5px'
-                      }}>
-                        <span>{statusInfo?.icon}</span>
-                        <span>{statusInfo?.label}</span>
-                      </div>
+                      <span className="status-pill" style={{background:si?.color||'#888'}}>{si?.icon} {si?.label}</span>
                     </div>
 
-                    {/* Order Content */}
-                    <div style={{padding: '20px'}}>
-                      <div style={{display: 'flex', gap: '20px', marginBottom: '15px'}}>
-                        {/* Product Image */}
-                        {product && product.images && product.images[0] && (
-                          <img 
-                            src={product.images[0]}
-                            alt={product.name}
-                            style={{
-                              width: '100px',
-                              height: '100px',
-                              objectFit: 'cover',
-                              borderRadius: '4px',
-                              border: '1px solid #e0e0e0'
-                            }}
-                          />
-                        )}
-                        
-                        {/* Product Details */}
-                        <div style={{flex: 1}}>
-                          <h3 style={{margin: '0 0 8px 0', fontSize: '16px', fontWeight: '500', color: '#212121'}}>
-                            {product ? product.name : 'Product'}
-                          </h3>
-                          <div style={{fontSize: '14px', color: '#757575', marginBottom: '8px'}}>
-                            Quantity: {firstItem?.quantity || 1} × ₹{formatPrice(firstItem?.price || 0)}
-                          </div>
-                          <div style={{fontSize: '20px', fontWeight: '600', color: '#388e3c'}}>
-                            Total: ₹{formatPrice(order.totalAmount)}
-                          </div>
-                        </div>
+                    {/* body */}
+                    <div className="order-card-body">
+                      <img src={product?.images?.[0]||`https://placehold.co/72x72/eee/999?text=O`} alt="p" className="order-card-img" onError={e=>{e.target.src='https://placehold.co/72x72/eee/999?text=Img';}}/>
+                      <div className="order-card-details">
+                        <div className="order-card-product">{product?.name||(item?.name||'Product')}</div>
+                        <div className="order-card-qty">Qty: {item?.quantity||1} × ₹{fmt(item?.price||0)}</div>
+                        {addr.line && <div className="order-card-addr">📍 {addr.line}{addr.phone&&` · ${addr.phone}`}</div>}
+                        {order.trackingNumber && <div className="order-card-tracking">🚚 {order.courierName} · #{order.trackingNumber}{order.estimatedDelivery&&` · Est: ${new Date(order.estimatedDelivery).toLocaleDateString('en-IN')}`}</div>}
+                        {isCancel && order.cancellationReason && <div className="cancel-warn">⚠️ Cancellation requested: {order.cancellationReason}</div>}
                       </div>
-
-                      {/* Shipping Address */}
-                      {order.shippingAddress && (() => {
-                        const d = getShippingDisplay(order.shippingAddress);
-                        if (!d.line && !d.phone) return null;
-                        return (
-                          <div style={{
-                            background: '#e8f5e9',
-                            padding: '12px',
-                            borderRadius: '4px',
-                            marginBottom: '15px'
-                          }}>
-                            <div style={{fontSize: '12px', fontWeight: '500', marginBottom: '5px', color: '#2e7d32'}}>
-                              📍 Delivery Address:
-                            </div>
-                            <div style={{fontSize: '13px', color: '#1b5e20'}}>
-                              {d.line || '—'}
-                              {d.phone && <><br/>Phone: {d.phone}</>}
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      {/* Tracking Info */}
-                      {order.trackingNumber && (
-                        <div style={{
-                          background: '#e3f2fd',
-                          padding: '12px',
-                          borderRadius: '4px',
-                          marginBottom: '15px'
-                        }}>
-                          <div style={{fontSize: '12px', fontWeight: '500', marginBottom: '5px', color: '#1565c0'}}>
-                            🚚 Tracking Information:
-                          </div>
-                          <div style={{fontSize: '13px', color: '#0d47a1'}}>
-                            Courier: <strong>{order.courierName}</strong><br/>
-                            Tracking #: <strong>{order.trackingNumber}</strong>
-                            {order.estimatedDelivery && (
-                              <><br/>Est. Delivery: {new Date(order.estimatedDelivery).toLocaleDateString()}</>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Cancellation Request */}
-                      {order.cancellationReason && (
-                        <div style={{
-                          background: '#ffebee',
-                          padding: '12px',
-                          borderRadius: '4px',
-                          borderLeft: '4px solid #f44336',
-                          marginBottom: '15px'
-                        }}>
-                          <div style={{fontSize: '12px', fontWeight: '500', marginBottom: '5px', color: '#c62828'}}>
-                            ⚠️ Cancellation Request
-                          </div>
-                          <div style={{fontSize: '13px', color: '#c62828', marginBottom: '8px'}}>
-                            <strong>Reason:</strong> {order.cancellationReason}
-                          </div>
-                          {order.cancellationImages && order.cancellationImages.length > 0 && (
-                            <div style={{display: 'flex', gap: '8px', marginTop: '10px'}}>
-                              {order.cancellationImages.map((img, idx) => (
-                                <img 
-                                  key={idx} 
-                                  src={img} 
-                                  alt={`Proof ${idx + 1}`} 
-                                  style={{
-                                    width: '60px',
-                                    height: '60px',
-                                    objectFit: 'cover',
-                                    borderRadius: '4px',
-                                    border: '2px solid #e57373',
-                                    cursor: 'pointer'
-                                  }}
-                                  onClick={() => window.open(img, '_blank')}
-                                />
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Admin Actions */}
-                      {canUpdateStatus && (
-                        <div>
-                          {/* Cancel Request Actions */}
-                          {order.status === 'cancel_requested' && (
-                            <div>
-                              <div style={{fontSize: '13px', fontWeight: '600', marginBottom: '10px', color: '#e65100'}}>
-                                ⚠️ Cancellation Request Pending
-                              </div>
-                              <div style={{display: 'flex', gap: '8px', flexWrap: 'wrap'}}>
-                                <button 
-                                  onClick={() => handleCancellationAction(order.id, 'approve')}
-                                  style={{
-                                    padding: '8px 16px',
-                                    background: '#388e3c',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                    fontSize: '13px',
-                                    fontWeight: '500'
-                                  }}
-                                >
-                                  ✅ Approve Cancellation
-                                </button>
-                                <button 
-                                  onClick={() => handleCancellationAction(order.id, 'reject')}
-                                  style={{
-                                    padding: '8px 16px',
-                                    background: '#f44336',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                    fontSize: '13px',
-                                    fontWeight: '500'
-                                  }}
-                                >
-                                  ❌ Reject Request
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Regular Status Updates — only show when there are next states */}
-                          {order.status !== 'cancel_requested' && statusInfo?.nextStates?.length > 0 && (
-                            <div style={{display: 'flex', gap: '8px', flexWrap: 'wrap'}}>
-                              {statusInfo.nextStates.map(nextStatus => (
-                                <button 
-                                  key={nextStatus}
-                                  onClick={() => handleStatusUpdate(order, nextStatus)}
-                                  style={{
-                                    padding: '8px 16px',
-                                    background: nextStatus === 'cancelled' ? '#f44336' : (orderStatuses[nextStatus]?.color || '#2874f0'),
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                    fontSize: '13px',
-                                    fontWeight: '500',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '5px'
-                                  }}
-                                >
-                                  <span>{orderStatuses[nextStatus]?.icon}</span>
-                                  <span>Mark as {orderStatuses[nextStatus]?.label}</span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      <div className="order-card-amount">₹{fmt(order.totalAmount)}</div>
                     </div>
+
+                    {/* actions */}
+                    {userRole==='admin' && (
+                      <div className="order-card-actions">
+                        {isCancel ? (
+                          <>
+                            <span style={{fontSize:'.76rem',fontWeight:700,color:'var(--warning)'}}>Action needed:</span>
+                            <button className="btn btn-success btn-sm" onClick={()=>onCancelAction(order.id,'approve')}>✅ Approve</button>
+                            <button className="btn btn-danger btn-sm"  onClick={()=>onCancelAction(order.id,'reject')}>❌ Reject</button>
+                          </>
+                        ) : si?.next?.map(ns => (
+                          <button key={ns} className="btn btn-sm" onClick={()=>onStatusClick(order,ns)}
+                            style={{background:ns==='cancelled'?'var(--danger)':OS[ns]?.color||'var(--fk-blue)',color:'#fff'}}>
+                            {OS[ns]?.icon} {OS[ns]?.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
-          )}
-        </div>
+        }
 
-        {/* Admin Cancel Reason Modal */}
-        {cancelModal && (
+        {/* ── Cancel reason modal ── */}
+        {cancelMod && (
           <div className="modal-overlay">
-            <div className="modal" style={{maxWidth: '480px'}}>
-              <div className="modal-header" style={{background: 'linear-gradient(135deg, #f44336 0%, #c62828 100%)', borderRadius: 'var(--radius-md) var(--radius-md) 0 0'}}>
-                <div>
-                  <h3 className="modal-title" style={{color: '#fff'}}>❌ Cancel Order #{cancelModal.order.id}</h3>
-                  <div style={{fontSize: '0.78rem', color: 'rgba(255,255,255,0.8)', marginTop: 2}}>
-                    This reason will be shown to the customer
-                  </div>
-                </div>
-                <button className="modal-close" style={{background: 'rgba(255,255,255,0.15)', color: '#fff'}} onClick={() => { setCancelModal(null); setCancelReason(''); }}>✕</button>
+            <div className="modal" style={{maxWidth:460}}>
+              <div className="modal-header" style={{background:'linear-gradient(135deg,#d32f2f,#b71c1c)',borderRadius:'var(--radius-lg) var(--radius-lg) 0 0'}}>
+                <div><div className="modal-title" style={{color:'#fff'}}>❌ Cancel Order #{cancelMod.order.id}</div><div style={{fontSize:'.72rem',color:'rgba(255,255,255,.75)',marginTop:3}}>Customer will see this reason</div></div>
+                <button className="modal-close" style={{background:'rgba(255,255,255,.15)',color:'#fff'}} onClick={()=>{setCancelMod(null);setCancelReason('');}}>✕</button>
               </div>
               <div className="modal-body">
                 <div className="form-group">
-                  <label className="form-label">
-                    Cancellation Reason <span style={{color: 'var(--brand-danger)'}}>*</span>
-                  </label>
-                  <textarea
-                    className="form-control"
-                    rows={4}
-                    value={cancelReason}
-                    onChange={(e) => setCancelReason(e.target.value)}
-                    placeholder="e.g. Item is out of stock, fraudulent order detected, payment verification failed..."
-                    style={{resize: 'vertical'}}
-                  />
-                  <div style={{fontSize: '12px', color: '#757575', marginTop: '6px'}}>
-                    ℹ️ The customer will see this reason in their order history so they understand why the order was cancelled.
-                  </div>
+                  <label className="form-label">Cancellation Reason *</label>
+                  <textarea className="form-control" rows={4} value={cancelReason} onChange={e=>setCancelReason(e.target.value)} placeholder="e.g. Item out of stock, payment verification failed…"/>
+                  <div className="form-text" style={{marginTop:5}}>ℹ️ Customer will see this in their order history.</div>
                 </div>
               </div>
               <div className="modal-footer">
-                <button className="btn btn-ghost" onClick={() => { setCancelModal(null); setCancelReason(''); }}>Back</button>
-                <button
-                  className="btn"
-                  style={{background: '#f44336', color: 'white'}}
-                  onClick={handleCancelSubmit}
-                >
-                  Confirm Cancellation
-                </button>
+                <button className="btn btn-ghost" onClick={()=>{setCancelMod(null);setCancelReason('');}}>Back</button>
+                <button className="btn btn-danger" onClick={()=>{ if(!cancelReason.trim()){alert('Reason required.');return;} updateStatus(cancelMod.order.id,'cancelled',{cancellationReason:cancelReason.trim()}); setCancelMod(null); setCancelReason(''); }}>Confirm Cancel</button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Shipping Modal */}
-        {selectedOrder && selectedOrder.pendingStatus === 'shipped' && (
+        {/* ── Shipping modal ── */}
+        {selOrder?.pend==='shipped' && (
           <div className="modal-overlay">
             <div className="modal">
-              <div className="modal-header" style={{background: 'linear-gradient(135deg, var(--brand-primary) 0%, #00bcd4 100)', borderRadius: 'var(--radius-md) var(--radius-md) 0 0'}}>
-                <div>
-                  <h3 className="modal-title" style={{color: '#fff'}}>🚚 Add Shipping Details</h3>
-                  <div style={{fontSize: '0.78rem', color: 'rgba(255,255,255,0.8)', marginTop: 2}}>Order #{selectedOrder.id}</div>
-                </div>
-                <button className="modal-close" style={{background: 'rgba(255,255,255,0.15)', color: '#fff'}} onClick={() => { setSelectedOrder(null); setTrackingDetails({ trackingNumber: '', courierName: '', estimatedDelivery: '' }); }}>✕</button>
+              <div className="modal-header" style={{background:'linear-gradient(135deg,var(--fk-blue),var(--fk-blue-dark))',borderRadius:'var(--radius-lg) var(--radius-lg) 0 0'}}>
+                <div><div className="modal-title" style={{color:'#fff'}}>🚚 Add Shipping Details</div><div style={{fontSize:'.72rem',color:'rgba(255,255,255,.75)',marginTop:3}}>Order #{selOrder.id}</div></div>
+                <button className="modal-close" style={{background:'rgba(255,255,255,.15)',color:'#fff'}} onClick={()=>{setSelOrder(null);setTracking({trackingNumber:'',courierName:'',estimatedDelivery:''});}}>✕</button>
               </div>
               <div className="modal-body">
-                <div className="form-group mb-12">
-                  <label className="form-label">Tracking Number <span style={{color: 'var(--brand-danger)'}}>*</span></label>
-                  <input type="text" className="form-control" value={trackingDetails.trackingNumber} onChange={(e) => setTrackingDetails({...trackingDetails, trackingNumber: e.target.value})} placeholder="e.g., 1234567890" />
-                </div>
-                <div className="form-group mb-12">
-                  <label className="form-label">Courier Name <span style={{color: 'var(--brand-danger)'}}>*</span></label>
-                  <select className="form-control" value={trackingDetails.courierName} onChange={(e) => setTrackingDetails({...trackingDetails, courierName: e.target.value})}>
-                    <option value="">Select Courier</option>
-                    <option value="Blue Dart">Blue Dart</option>
-                    <option value="Delhivery">Delhivery</option>
-                    <option value="FedEx">FedEx</option>
-                    <option value="DHL">DHL</option>
-                    <option value="Ecom Express">Ecom Express</option>
-                    <option value="India Post">India Post</option>
-                    <option value="DTDC">DTDC</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Estimated Delivery Date <span className="text-muted">(optional)</span></label>
-                  <input type="date" className="form-control" value={trackingDetails.estimatedDelivery} onChange={(e) => setTrackingDetails({...trackingDetails, estimatedDelivery: e.target.value})} min={new Date().toISOString().split('T')[0]} />
+                <div className="tracking-form-wrap">
+                  <div className="tracking-form-title">🏷️ Tracking Information</div>
+                  <div className="grid-2 mb-12">
+                    <div className="form-group">
+                      <label className="form-label">Tracking Number *</label>
+                      <input className="form-control" value={tracking.trackingNumber} onChange={e=>setTracking({...tracking,trackingNumber:e.target.value})} placeholder="e.g. 1234567890"/>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Courier *</label>
+                      <select className="form-control" value={tracking.courierName} onChange={e=>setTracking({...tracking,courierName:e.target.value})}>
+                        <option value="">Select courier</option>
+                        {['Blue Dart','Delhivery','FedEx','DHL','Ecom Express','India Post','DTDC'].map(c=><option key={c}>{c}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Est. Delivery Date <span className="text-muted">(optional)</span></label>
+                    <input type="date" className="form-control" value={tracking.estimatedDelivery} onChange={e=>setTracking({...tracking,estimatedDelivery:e.target.value})} min={new Date().toISOString().split('T')[0]}/>
+                  </div>
                 </div>
               </div>
               <div className="modal-footer">
-                <button className="btn btn-ghost" onClick={() => { setSelectedOrder(null); setTrackingDetails({ trackingNumber: '', courierName: '', estimatedDelivery: '' }); }}>Cancel</button>
-                <button className="btn btn-blue" onClick={handleShippingSubmit}>Confirm & Mark as Shipped</button>
+                <button className="btn btn-ghost" onClick={()=>{setSelOrder(null);setTracking({trackingNumber:'',courierName:'',estimatedDelivery:''});}}>Cancel</button>
+                <button className="btn btn-blue" onClick={()=>{ if(!tracking.trackingNumber||!tracking.courierName){alert('Tracking # and courier required.');return;} updateStatus(selOrder.id,'shipped',{...tracking,shippedAt:new Date().toISOString()}); }}>🚚 Mark as Shipped</button>
               </div>
             </div>
           </div>
@@ -678,5 +242,3 @@ function Orders({ token, userRole }) {
     </div>
   );
 }
-
-export default Orders;

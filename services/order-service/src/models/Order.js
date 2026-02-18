@@ -118,6 +118,34 @@ const orderSchema = new mongoose.Schema({
   adminNotes: String,
   customerNotes: String,
   
+  // Soft Delete Fields
+  isDeleted: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  deletedAt: Date,
+  deletedBy: Number,
+  deletionExpiresAt: Date, // 30 days after deletion
+  
+  // Restoration Request Fields
+  restorationRequested: {
+    type: Boolean,
+    default: false
+  },
+  restorationRequestedAt: Date,
+  restorationReason: String,
+  restorationStatus: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: null
+  },
+  restorationApprovedBy: Number,
+  restorationApprovedAt: Date,
+  restorationRejectedBy: Number,
+  restorationRejectedAt: Date,
+  restorationRejectionReason: String,
+  
   updatedAt: {
     type: Date,
     default: Date.now

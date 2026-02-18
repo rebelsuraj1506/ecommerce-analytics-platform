@@ -1,0 +1,59 @@
+const express = require('express');
+const router = express.Router();
+const { body } = require('express-validator');
+const { authenticate: auth } = require('../middleware/auth');
+const profileController = require('../controllers/profileController');
+
+// Profile routes
+router.get('/profile', auth, profileController.getProfile);
+
+router.put('/profile', 
+  auth,
+  [
+    body('name').trim().notEmpty().withMessage('Name is required'),
+    body('phone').optional().trim(),
+    body('currentPassword').optional(),
+    body('newPassword').optional().isLength({ min: 8 })
+      .withMessage('Password must be at least 8 characters')
+  ],
+  profileController.updateProfile
+);
+
+// Address routes
+router.get('/addresses', auth, profileController.getAddresses);
+
+router.post('/addresses',
+  auth,
+  [
+    body('label').trim().notEmpty().withMessage('Address label is required'),
+    body('street').trim().notEmpty().withMessage('Street address is required'),
+    body('city').trim().notEmpty().withMessage('City is required'),
+    body('state').trim().notEmpty().withMessage('State is required'),
+    body('zipCode').trim().notEmpty().withMessage('ZIP code is required'),
+    body('phone').trim().notEmpty().withMessage('Phone number is required'),
+    body('country').optional().trim(),
+    body('isDefault').optional().isBoolean()
+  ],
+  profileController.addAddress
+);
+
+router.put('/addresses/:id',
+  auth,
+  [
+    body('label').trim().notEmpty().withMessage('Address label is required'),
+    body('street').trim().notEmpty().withMessage('Street address is required'),
+    body('city').trim().notEmpty().withMessage('City is required'),
+    body('state').trim().notEmpty().withMessage('State is required'),
+    body('zipCode').trim().notEmpty().withMessage('ZIP code is required'),
+    body('phone').trim().notEmpty().withMessage('Phone number is required'),
+    body('country').optional().trim(),
+    body('isDefault').optional().isBoolean()
+  ],
+  profileController.updateAddress
+);
+
+router.delete('/addresses/:id', auth, profileController.deleteAddress);
+
+router.put('/addresses/:id/default', auth, profileController.setDefaultAddress);
+
+module.exports = router;
