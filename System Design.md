@@ -29,7 +29,7 @@ The **E-Commerce Analytics Platform** is a cloud-ready, containerized applicatio
           │                        │                       │                             │
           ▼                        ▼                       ▼                             ▼
        MySQL                    MongoDB                 PostgreSQL                      Redis
-    (users_db)                 (products_db)            (orders_db)                 (Cache / Analytics)
+     (users_db)              (products_db)              (orders_db)               (Cache / Analytics)
 ```
 
 ---
