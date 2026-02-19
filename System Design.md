@@ -13,23 +13,23 @@ The **E-Commerce Analytics Platform** is a cloud-ready, containerized applicatio
                           │                 Frontend               │
                           │             (React / Node.js)          │
                           │               localhost:3000           │
-                          └─────────────────────┬──────────────────┘
-                                                │ HTTP
+                          └────────────────────┬───────────────────┘
+                                               │ HTTP
                           ┌────────────────────▼───────────────────┐
                           │               API Gateway              │
                           │             localhost:8000             │
                           └──┬──────────┬───────────┬────────────┬─┘
                              │          │           │            │
-              ┌──────────────┘          │           └────────┐   └────────────────────────┐
-              │                      ┌──┘                    │                            │
-   ┌──────────▼──────┐      ┌────────▼────────┐     ┌────────▼───────┐          ┌─────────▼──────────┐
+            ┌────────────────┘          │           └────────┐   └────────────────────────┐
+            │                        ┌──┘                    │                            │
+   ┌────────▼────────┐      ┌────────▼────────┐     ┌────────▼───────┐          ┌─────────▼──────────┐
    │  User Service   │      │Product Service  │     │ Order Service  │          │  Analytics Service │
    │  localhost:8001 │      │ localhost:8002  │     │ localhost:8003 │          │  localhost:8004    │
-   └──────┬──────────┘      └──────┬──────────┘     └──────┬─────────┘          └────────┬───────────┘
-          │                        │                       │                             │
-          ▼                        ▼                       ▼                             ▼
-       MySQL                    MongoDB                 PostgreSQL                      Redis
-     (users_db)              (products_db)              (orders_db)               (Cache / Analytics)
+   └────────┬────────┘      └────────┬────────┘     └────────┬───────┘          └─────────┬──────────┘
+            │                        │                       │                            │
+            ▼                        ▼                       ▼                            ▼
+          MySQL                    MongoDB               PostgreSQL                     Redis
+        (users_db)                (products_db)          (orders_db)              (Cache / Analytics)
 ```
 
 ---
