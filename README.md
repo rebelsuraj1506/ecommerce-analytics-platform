@@ -12,7 +12,7 @@ A production-ready microservices-based e-commerce analytics platform built with 
 │  │  • API Gateway (Rate Limiting)       │  │
 │  │  • User Service (MySQL)              │  │
 │  │  • Product Service (MongoDB)         │  │
-│  │  • Order Service (PostgreSQL)        │  │
+│  │  • Order Service (PostgreSQL + MongoDB)     │  │
 │  │  • Analytics Service (Redis)         │  │
 │  │  • Frontend (React Dashboard)        │  │
 │  │  • Redis (Cache/Sessions/Queue)      │  │
@@ -32,7 +32,8 @@ A production-ready microservices-based e-commerce analytics platform built with 
 ### Backend
 - **Node.js** + Express.js - Microservices
 - **MySQL** (RDS) - User authentication & management
-- **PostgreSQL** (RDS) - Orders & transactions
+- **PostgreSQL** (RDS) - Orders & transactions (core order records)
+- **MongoDB** (Docker) - Orders extended data (soft-delete, restoration workflow)
 - **MongoDB** (Docker) - Product catalog
 - **Redis** (Docker) - Caching, sessions, rate limiting, analytics
 
@@ -80,7 +81,6 @@ ecommerce-analytics-platform/
 | [QUICKSTART.md](./QUICKSTART.md) | Step-by-step setup with env examples and health checks |
 | [COMMANDS.md](./COMMANDS.md) | Command reference: Docker, DB, API testing, troubleshooting |
 | [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) | AWS EC2, RDS, S3 deployment guide |
-| [PROJECT_SUMMARY.md](./PROJECT_SUMMARY.md) | What’s built and project structure |
 
 ## 🚀 Quick Start
 

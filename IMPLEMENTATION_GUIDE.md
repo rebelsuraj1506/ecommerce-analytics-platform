@@ -666,7 +666,7 @@ REDIS_PORT=6379
 
 ### Order Service (.env)
 ```bash
-MONGODB_URI=mongodb://localhost:27017/ecommerce
+MONGODB_URI=mongodb://localhost:27017/orders_db
 JWT_SECRET=your_secure_jwt_secret_here
 REDIS_HOST=localhost
 REDIS_PORT=6379

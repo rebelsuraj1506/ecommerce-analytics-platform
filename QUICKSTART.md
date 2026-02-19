@@ -289,7 +289,7 @@ docker-compose up --build -d
 
 ### Port conflicts
 
-If ports 3000, 8000-8004, 3306, 5432, 27017, or 6379 are already in use:
+If ports 3000, 8000-8004, 3307, 5432, 27017, or 6379 are already in use:
 
 1. Stop conflicting services
 2. Or modify ports in `docker-compose.yml`
@@ -317,7 +317,7 @@ docker-compose up --build -d
 | Product Service | 8002 | http://localhost:8002 |
 | Order Service | 8003 | http://localhost:8003 |
 | Analytics Service | 8004 | http://localhost:8004 |
-| MySQL | 3306 | localhost:3306 |
+| MySQL | 3307 | localhost:3307 |
 | PostgreSQL | 5432 | localhost:5432 |
 | MongoDB | 27017 | localhost:27017 |
 | Redis | 6379 | localhost:6379 |

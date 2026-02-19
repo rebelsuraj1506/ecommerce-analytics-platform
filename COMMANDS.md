@@ -360,7 +360,7 @@ curl http://localhost:8004/api/analytics/dashboard \
 ### Port Already in Use
 ```bash
 # Find process using port
-lsof -i :3306  # MySQL
+lsof -i :3307  # MySQL
 lsof -i :5432  # PostgreSQL
 lsof -i :27017 # MongoDB
 lsof -i :6379  # Redis
@@ -396,5 +396,4 @@ docker-compose exec postgres pg_isready
 For more details, see:
 - [README.md](./README.md) - Complete documentation and API overview
 - [QUICKSTART.md](./QUICKSTART.md) - Detailed setup and env examples
-- [PROJECT_SUMMARY.md](./PROJECT_SUMMARY.md) - What was built
 - [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) - AWS deployment guide
