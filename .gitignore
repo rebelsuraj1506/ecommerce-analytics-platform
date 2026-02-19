@@ -45,3 +45,6 @@ out/
 # Test coverage
 coverage/
 .nyc_output/
+
+Interview QA.md
+INTERVIEW_QA.pdf
