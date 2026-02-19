@@ -76,12 +76,17 @@ export default function MyOrders({ token, userId, userName }) {
   const [detailSubmitting, setDetailSubmitting] = useState(false);
   const [detailInfo,       setDetailInfo]       = useState(null);
 
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ total:0, pages:1 });
+  const [statusFilter, setStatusFilter] = useState('all');
+  const PAGE_SIZE = 15;
+
   useEffect(() => {
     document.title = 'My Orders — ShopMart';
     return () => { document.title = 'ShopMart'; };
   }, []);
 
-  useEffect(() => { fetchProducts(); fetchOrders(); fetchDeletedOrders(); }, [token, userId]);
+  useEffect(() => { fetchProducts(); fetchOrders(1); fetchDeletedOrders(); }, [token, userId]);
 
   const fetchProducts = async () => {
     try {
@@ -92,16 +97,20 @@ export default function MyOrders({ token, userId, userName }) {
     } catch(e){ console.error(e); }
   };
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (pg = 1, sf = statusFilter) => {
     if (!userId) { setError('User ID missing — please log out and log in again.'); setLoading(false); return; }
+    setLoading(true);
     try {
-      const r = await fetch('http://localhost:8000/api/orders',{ headers:{ Authorization:`Bearer ${token}` } });
+      const statusParam = sf !== 'all' ? `&status=${sf}` : '';
+      const r = await fetch(`http://localhost:8000/api/orders?limit=${PAGE_SIZE}&page=${pg}${statusParam}`,{ headers:{ Authorization:`Bearer ${token}` } });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const d = await r.json();
       const all = d.data?.orders||[];
+      // Backend already filters by user for non-admins, but filter just in case
       const mine = all.filter(o => String(o.userId||o.user_id||o._userId) === String(userId));
       mine.sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt));
       setOrders(mine);
+      setPagination({ total: d.data?.pagination?.total||mine.length, pages: d.data?.pagination?.pages||1 });
     } catch(e){ setError('Failed to load orders: '+e.message); }
     finally { setLoading(false); }
   };
@@ -142,7 +151,7 @@ export default function MyOrders({ token, userId, userName }) {
         method:'POST', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
         body: JSON.stringify({ reason, images:cancelData.images.filter(x=>x.trim()) })
       });
-      if (r.ok) { alert('✅ Cancellation request submitted! Our team will review within 24–48 hours.'); setCancelModal(null); setCancelData({reason:'',customReason:'',images:[]}); fetchOrders(); }
+      if (r.ok) { alert('✅ Cancellation request submitted! Our team will review within 24–48 hours.'); setCancelModal(null); setCancelData({reason:'',customReason:'',images:[]}); fetchOrders(page, statusFilter); }
       else { const e=await r.json(); alert(e.message||'Failed'); }
     } catch(e){ alert(e.message); }
   };
@@ -173,7 +182,7 @@ export default function MyOrders({ token, userId, userName }) {
         method:'POST', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
         body: JSON.stringify({ reason:note?`${finalReason}: ${note}`:finalReason, returnType:returnData.type, images:returnData.images.filter(x=>x.trim()) })
       });
-      if (r.ok) { alert(`✅ ${returnData.type==='replace'?'Replacement':'Return'} request submitted!`); setReturnModal(null); setReturnData({type:'return',primaryReason:'',subReason:'',customReason:'',images:[]}); fetchOrders(); }
+      if (r.ok) { alert(`✅ ${returnData.type==='replace'?'Replacement':'Return'} request submitted!`); setReturnModal(null); setReturnData({type:'return',primaryReason:'',subReason:'',customReason:'',images:[]}); fetchOrders(page, statusFilter); }
       else { const e=await r.json(); alert(e.message||'Failed'); }
     } catch(e){ alert(e.message); } finally { setReturnSubmitting(false); }
   };
@@ -211,6 +220,43 @@ export default function MyOrders({ token, userId, userName }) {
         <div className="page-title-row">
           <h1 className="page-title">My Orders</h1>
           <span className="page-count">{orders.length}</span>
+        </div>
+      </div>
+
+      {/* Status Filter */}
+      <div style={{ padding:'0 0 14px', overflowX:'auto' }}>
+        <div style={{ display:'flex', gap:8, minWidth:'max-content' }}>
+          {[
+            { key:'all', label:'All Orders', icon:'🛒' },
+            { key:'pending', label:'Order Placed', icon:'📋' },
+            { key:'processing', label:'Processing', icon:'⚙️' },
+            { key:'shipped', label:'Shipped', icon:'🚚' },
+            { key:'out_for_delivery', label:'Out for Delivery', icon:'🚛' },
+            { key:'delivered', label:'Delivered', icon:'✅' },
+            { key:'cancel_requested', label:'Cancel Requested', icon:'⏳' },
+            { key:'cancelled', label:'Cancelled', icon:'❌' },
+            { key:'refunded', label:'Refunded', icon:'💚' },
+          ].map(({ key, label, icon }) => (
+            <button
+              key={key}
+              onClick={() => { setStatusFilter(key); setPage(1); fetchOrders(1, key); }}
+              style={{
+                padding:'6px 13px', borderRadius:20, border:'1.5px solid',
+                borderColor: statusFilter===key ? 'var(--fk-blue)' : 'var(--gray-200)',
+                background: statusFilter===key ? 'var(--fk-blue)' : '#fff',
+                color: statusFilter===key ? '#fff' : 'var(--gray-600)',
+                fontSize:'.78rem', fontWeight:600, cursor:'pointer', whiteSpace:'nowrap',
+                transition:'all 0.15s'
+              }}
+            >
+              {icon} {label}
+              {statusFilter===key && pagination.total > 0 && (
+                <span style={{ marginLeft:5, background:'rgba(255,255,255,0.25)', borderRadius:10, padding:'1px 6px', fontSize:'.7rem' }}>
+                  {pagination.total}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -739,6 +785,30 @@ export default function MyOrders({ token, userId, userName }) {
         </div>
       )}
 
+      {/* Pagination */}
+      {pagination.pages > 1 && (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:12, padding:'20px 0 8px' }}>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => { const np = Math.max(1, page-1); setPage(np); fetchOrders(np, statusFilter); }}
+            disabled={page === 1}
+            style={{ minWidth:90 }}
+          >
+            ← Previous
+          </button>
+          <span style={{ fontSize:'.84rem', color:'var(--gray-600)', fontWeight:600 }}>
+            Page {page} of {pagination.pages} &nbsp;·&nbsp; {pagination.total} orders
+          </span>
+          <button
+            className="btn btn-sm"
+            onClick={() => { const np = Math.min(pagination.pages, page+1); setPage(np); fetchOrders(np, statusFilter); }}
+            disabled={page === pagination.pages}
+            style={{ minWidth:90, background:'var(--fk-blue)', color:'#fff' }}
+          >
+            Next →
+          </button>
+        </div>
+      )}
       <BackToTop />
     </div>
   );

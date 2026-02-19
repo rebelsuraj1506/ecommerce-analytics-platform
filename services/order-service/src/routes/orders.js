@@ -73,7 +73,7 @@ const extractUser = (req, res, next) => {
 // Get all orders for the logged-in user
 router.get('/', [
   query('page').optional().isInt({ min: 1 }).toInt(),
-  query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
+  query('limit').optional().isInt({ min: 1, max: 10000 }).toInt(),
   query('status').optional().isString()
 ], validateRequest, extractUser, async (req, res) => {
   const pool = getPool();
@@ -81,7 +81,7 @@ router.get('/', [
   
   try {
     const page = req.query.page || 1;
-    const limit = req.query.limit || 10;
+    const limit = req.query.limit || 15;
     const offset = (page - 1) * limit;
     const userId = req.user.id;
     const userRole = req.user.role;

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import './pages.css';
 
 function Products({ token, userRole }) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
@@ -17,10 +19,27 @@ function Products({ token, userRole }) {
   const [saveAddrChecked, setSaveAddrChecked] = useState(false);
   const [formData, setFormData] = useState({ name:'', description:'', price:'', inventory:'', category:'electronics', images:[] });
   const [loading, setLoading] = useState(true);
-  const [searchQ, setSearchQ] = useState('');
+  const [searchQ, setSearchQ] = useState(searchParams.get('search') || '');
   const [catFilter, setCatFilter] = useState('all');
   const [toast, setToast] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+  // Sync searchQ when URL param changes (e.g. header search navigates here)
+  useEffect(() => {
+    const paramSearch = searchParams.get('search') || '';
+    setSearchQ(paramSearch);
+  }, [searchParams]);
+
+  // Update URL when user types in the local search box
+  const handleSearchChange = (e) => {
+    const val = e.target.value;
+    setSearchQ(val);
+    if (val.trim()) {
+      setSearchParams({ search: val });
+    } else {
+      setSearchParams({});
+    }
+  };
 
   const showToast = (msg, type = 'info') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
 
@@ -131,7 +150,12 @@ function Products({ token, userRole }) {
 
   const filtered = products.filter(p => {
     const matchCat = catFilter === 'all' || p.category === catFilter;
-    const matchSearch = !searchQ || p.name?.toLowerCase().includes(searchQ.toLowerCase());
+    const q = searchQ.toLowerCase();
+    const matchSearch = !q ||
+      p.name?.toLowerCase().includes(q) ||
+      p.description?.toLowerCase().includes(q) ||
+      p.category?.toLowerCase().includes(q) ||
+      p.brand?.toLowerCase().includes(q);
     return matchCat && matchSearch;
   });
 
@@ -220,10 +244,10 @@ function Products({ token, userRole }) {
                 type="text"
                 placeholder="Search products…"
                 value={searchQ}
-                onChange={e => setSearchQ(e.target.value)}
+                onChange={handleSearchChange}
               />
               {searchQ && (
-                <button className="search-clear-btn" onClick={() => setSearchQ('')} title="Clear search">✕</button>
+                <button className="search-clear-btn" onClick={() => { setSearchQ(''); setSearchParams({}); }} title="Clear search">✕</button>
               )}
             </div>
             <div className="filter-tabs">

@@ -35,6 +35,9 @@ export default function Orders({ token, userRole }) {
   const [toast, setToast] = useState(null);
   const [rejectModal, setRejectModal] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ total:0, pages:1 });
+  const PAGE_SIZE = 15;
 
   const showToast = (msg, type = 'info') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
 
@@ -43,19 +46,20 @@ export default function Orders({ token, userRole }) {
     return () => { document.title = 'ShopMart'; };
   }, [userRole]);
 
-  useEffect(() => { load(); }, [token]);
+  useEffect(() => { load(page); }, [token, page]);
 
-  const load = async () => {
+  const load = async (pg = 1, statusFilter = filter) => {
+    setLoading(true);
     try {
+      const statusParam = statusFilter !== 'all' ? `&status=${statusFilter}` : '';
       const [oR,pR,uR] = await Promise.all([
-        fetch('http://localhost:8000/api/orders',{ headers:{ Authorization:`Bearer ${token}` } }),
+        fetch(`http://localhost:8000/api/orders?limit=${PAGE_SIZE}&page=${pg}${statusParam}`,{ headers:{ Authorization:`Bearer ${token}` } }),
         fetch('http://localhost:8000/api/products?limit=100'),
         fetch('http://localhost:8000/api/users?limit=1000',{ headers:{ Authorization:`Bearer ${token}` } }),
       ]);
       const [oD,pD,uD] = await Promise.all([oR.json(),pR.json(),uR.json()]);
       const pMap={}, uMap={};
       (pD.data?.products||[]).forEach(p=>{pMap[p._id]=p;});
-      // Store users by multiple key formats to handle type mismatches
       (uD.data?.users||[]).forEach(u=>{
         uMap[u.id]=u;
         uMap[String(u.id)]=u;
@@ -63,6 +67,7 @@ export default function Orders({ token, userRole }) {
       });
       setProducts(pMap); setUsers(uMap);
       setOrders((oD.data?.orders||[]).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)));
+      setPagination({ total: oD.data?.pagination?.total||0, pages: oD.data?.pagination?.pages||1 });
     } catch(e){ console.error(e); } finally { setLoading(false); }
   };
 
@@ -72,7 +77,7 @@ export default function Orders({ token, userRole }) {
         method:'PUT', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` },
         body: JSON.stringify({ status, ...extra })
       });
-      if (r.ok) { load(); setSelOrder(null); setTracking({ trackingNumber:'',courierName:'',estimatedDelivery:'' }); showToast('Order status updated', 'success'); }
+      if (r.ok) { load(page); setSelOrder(null); setTracking({ trackingNumber:'',courierName:'',estimatedDelivery:'' }); showToast('Order status updated', 'success'); }
       else { const d=await r.json(); showToast(d.message||'Failed to update status', 'error'); }
     } catch(e){ showToast(e.message, 'error'); }
   };
@@ -87,7 +92,7 @@ export default function Orders({ token, userRole }) {
     const ep = `http://localhost:8000/api/orders/${id}/approve-cancel`;
     try {
       const res = await fetch(ep,{ method:'PUT', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` }, body:JSON.stringify({}) });
-      if (res.ok) { load(); showToast('Cancellation approved', 'success'); }
+      if (res.ok) { load(page); showToast('Cancellation approved', 'success'); }
       else { const d=await res.json(); showToast(d.message||'Error', 'error'); }
     } catch(e){ showToast(e.message, 'error'); }
   };
@@ -95,15 +100,17 @@ export default function Orders({ token, userRole }) {
     if (!rejectReason.trim()) { showToast('Rejection reason required', 'error'); return; }
     try {
       const res = await fetch(`http://localhost:8000/api/orders/${rejectModal}/reject-cancel`,{ method:'PUT', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${token}` }, body:JSON.stringify({ rejectionReason: rejectReason }) });
-      if (res.ok) { load(); showToast('Cancellation rejected', 'success'); }
+      if (res.ok) { load(page); showToast('Cancellation rejected', 'success'); }
       else { const d=await res.json(); showToast(d.message||'Error', 'error'); }
     } catch(e){ showToast(e.message, 'error'); }
     setRejectModal(null); setRejectReason('');
   };
 
-  const filtered = orders.filter(o => (filter==='all' || o.status===filter) && (!searchQ || String(o.id).includes(searchQ) || (users[o.userId]?.name||'').toLowerCase().includes(searchQ.toLowerCase())));
-  const counts   = { total:orders.length, pending:orders.filter(o=>o.status==='pending').length, processing:orders.filter(o=>o.status==='processing').length, delivered:orders.filter(o=>o.status==='delivered').length, cancelReq:orders.filter(o=>o.status==='cancel_requested').length };
+  const filtered = orders.filter(o => !searchQ || String(o.id).includes(searchQ) || (users[o.userId]?.name||'').toLowerCase().includes(searchQ.toLowerCase()));
+  const counts   = { total:pagination.total, pending:0, processing:0, delivered:0, cancelReq:0 };
   const FILTER_KEYS = ['all','pending','processing','shipped','out_for_delivery','delivered','cancel_requested','cancelled','refunded'];
+  const handleFilterChange = (f) => { setFilter(f); setPage(1); load(1, f); };
+  const handleSearch = (val) => { setSearchQ(val); setPage(1); load(1, filter); };
 
   if (loading) return <div className="page-wrap"><div className="spinner-wrap"><div className="spinner"/><span className="text-muted">Loading orders…</span></div></div>;
 
@@ -135,15 +142,15 @@ export default function Orders({ token, userRole }) {
                 type="text"
                 placeholder="Search by order ID or customer…"
                 value={searchQ}
-                onChange={e => setSearchQ(e.target.value)}
+                onChange={e => handleSearch(e.target.value)}
               />
-              {searchQ && <button className="search-clear-btn" onClick={() => setSearchQ('')} title="Clear">✕</button>}
+              {searchQ && <button className="search-clear-btn" onClick={() => { setSearchQ(''); setPage(1); load(1, filter); }} title="Clear">✕</button>}
             </div>
             <div className="filter-tabs">
               {FILTER_KEYS.map(s => (
-                <button key={s} className={`filter-tab${filter===s?' active':''}`} onClick={()=>setFilter(s)}>
+                <button key={s} className={`filter-tab${filter===s?' active':''}`} onClick={()=>handleFilterChange(s)}>
                   {s==='all'?'All':s.replace(/_/g,' ')}
-                  <span style={{fontSize:'.65rem',marginLeft:4,opacity:.7}}>({s==='all'?orders.length:orders.filter(o=>o.status===s).length})</span>
+                  {filter===s && <span style={{fontSize:'.65rem',marginLeft:4,opacity:.7}}>({pagination.total})</span>}
                 </button>
               ))}
             </div>
@@ -307,6 +314,30 @@ export default function Orders({ token, userRole }) {
           </div>
         )}
       </div>
+      {/* Pagination */}
+      {pagination.pages > 1 && (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:12, padding:'20px 0 8px' }}>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => setPage(p => { const np = Math.max(1,p-1); load(np); return np; })}
+            disabled={page === 1}
+            style={{ minWidth:90 }}
+          >
+            ← Previous
+          </button>
+          <span style={{ fontSize:'.84rem', color:'var(--gray-600)', fontWeight:600 }}>
+            Page {page} of {pagination.pages} &nbsp;·&nbsp; {pagination.total} orders
+          </span>
+          <button
+            className="btn btn-sm"
+            onClick={() => setPage(p => { const np = Math.min(pagination.pages,p+1); load(np); return np; })}
+            disabled={page === pagination.pages}
+            style={{ minWidth:90, background:'var(--fk-blue)', color:'#fff' }}
+          >
+            Next →
+          </button>
+        </div>
+      )}
       <BackToTop />
     </div>
   );

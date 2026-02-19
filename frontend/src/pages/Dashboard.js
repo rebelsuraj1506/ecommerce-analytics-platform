@@ -24,14 +24,17 @@ function Dashboard({ token, userRole }) {
 
   const computeStats = (orders) => {
     const totalOrders = orders.length;
-    const totalRevenue = orders.reduce((s, o) => s + (o.totalAmount || 0), 0);
+    // Only count revenue from orders that aren't cancelled or refunded
+    const EXCLUDED = new Set(['cancelled','cancel_requested','refund_processing','refunded']);
+    const totalRevenue = orders.reduce((s, o) => EXCLUDED.has(o.status) ? s : s + (o.totalAmount || 0), 0);
     const totalUnits = orders.reduce((s, o) => s + (o.items || []).reduce((ss, i) => ss + (i.quantity || 0), 0), 0);
     const statuses = ['pending','processing','shipped','out_for_delivery','delivered','cancel_requested','cancelled','refund_processing','refunded'];
     const ordersByStatus = {}, revenueByStatus = {};
     statuses.forEach(s => {
       const f = orders.filter(o => o.status === s);
       ordersByStatus[s] = f.length;
-      revenueByStatus[s] = f.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+      // Refunded/cancelled = money returned, show as 0 in breakdown
+      revenueByStatus[s] = EXCLUDED.has(s) ? 0 : f.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
     });
     return { totalOrders, totalRevenue, totalUnits, ordersByStatus, revenueByStatus, allOrders: orders };
   };
@@ -40,7 +43,7 @@ function Dashboard({ token, userRole }) {
     const fetchStats = async () => {
       try {
         const [ordersRes, productsRes] = await Promise.all([
-          fetch('http://localhost:8000/api/orders', { headers: { Authorization: `Bearer ${token}` } }),
+          fetch('http://localhost:8000/api/orders?limit=1000', { headers: { Authorization: `Bearer ${token}` } }),
           fetch('http://localhost:8000/api/products?limit=100')
         ]);
         const ordersData = await ordersRes.json();

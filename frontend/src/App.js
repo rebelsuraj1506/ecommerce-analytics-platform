@@ -34,6 +34,7 @@ function AuthShell({ user, token, logout }) {
     e.preventDefault();
     if (headerSearch.trim()) {
       navigate(`/products?search=${encodeURIComponent(headerSearch.trim())}`);
+      setHeaderSearch('');
     }
   };
 
@@ -272,15 +273,15 @@ function AppContent() {
 
   if (!user) return <LoginPage />;
 
-  return (
-    <BrowserRouter>
-      <AuthShell user={user} token={token} logout={logout} />
-    </BrowserRouter>
-  );
+  return <AuthShell user={user} token={token} logout={logout} />;
 }
 
 function App() {
-  return <AppContent />;
+  return (
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
+  );
 }
 
 export default App;

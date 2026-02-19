@@ -58,7 +58,7 @@ function AdminPanel({ token }) {
       // Fetch orders
       let orders = [];
       try {
-        const ordersRes = await fetch('http://localhost:8000/api/orders', { 
+        const ordersRes = await fetch('http://localhost:8000/api/orders?limit=1000', { 
           headers: { 'Authorization': `Bearer ${token}` } 
         });
         const ordersData = await ordersRes.json();
@@ -351,7 +351,7 @@ function AdminPanel({ token }) {
 
   // ========== USER STATS ==========
   const getUserStats = (userId) => {
-    const userOrders = allOrders.filter(o => o.userId === userId);
+    const userOrders = allOrders.filter(o => String(o.userId) === String(userId));
     const totalSpent = userOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
     const totalOrders = userOrders.length;
     const completedOrders = userOrders.filter(o => o.status === 'delivered').length;
@@ -415,14 +415,15 @@ function AdminPanel({ token }) {
     }
   });
 
+  const EXCLUDED_STATUSES = new Set(['cancelled','cancel_requested','refund_processing','refunded']);
   const stats = {
     totalUsers: allUsers.filter(u => u.role !== 'admin').length,
     totalAdmins: allUsers.filter(u => u.role === 'admin').length,
     totalOrders: allOrders.length,
-    totalRevenue: allOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0),
+    totalRevenue: allOrders.reduce((sum, o) => EXCLUDED_STATUSES.has(o.status) ? sum : sum + (o.totalAmount || 0), 0),
     pendingCancellations: allOrders.filter(o => o.status === 'cancel_requested').length,
     activeUsers: allUsers.filter(u => {
-      const userOrders = allOrders.filter(o => o.userId === u.id);
+      const userOrders = allOrders.filter(o => String(o.userId) === String(u.id));
       return userOrders.length > 0;
     }).length
   };
