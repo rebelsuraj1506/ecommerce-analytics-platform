@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Architecture Diagram — E-Commerce Analytics Platform</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy:    #0D1B4B;
+    --indigo:  #1E3A8A;
+    --accent:  #3B82F6;
+    --accent2: #60A5FA;
+    --light:   #EFF6FF;
+    --mid-bg:  #DBEAFE;
+    --mid:     #374151;
+    --muted:   #6B7280;
+    --border:  #BFDBFE;
+    --mysql:   #E8833A;
+    --mongo:   #4DB33D;
+    --pg:      #336791;
+    --redis:   #DC382D;
+    --white:   #ffffff;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #060E24;
+    color: var(--white);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    overflow-x: hidden;
+  }
+
+  /* grid bg */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(59,130,246,.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(59,130,246,.04) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  /* glow orbs */
+  .orb {
+    position: fixed; border-radius: 50%; filter: blur(80px); pointer-events: none; opacity: .35;
+  }
+  .orb1 { width: 500px; height: 500px; background: #1E3A8A; top: -150px; left: -150px; }
+  .orb2 { width: 400px; height: 400px; background: #0D1B4B; bottom: -100px; right: -100px; }
+  .orb3 { width: 300px; height: 300px; background: #1d4ed8; top: 40%; left: 60%; opacity: .15; }
+
+  .container {
+    position: relative; z-index: 1;
+    width: 100%; max-width: 900px;
+  }
+
+  /* header */
+  .header {
+    text-align: center; margin-bottom: 3rem;
+    animation: fadeDown .6s ease both;
+  }
+  .eyebrow {
+    font-size: .65rem; font-weight: 600; letter-spacing: .2em;
+    text-transform: uppercase; color: var(--accent2);
+    margin-bottom: .75rem;
+  }
+  .title {
+    font-family: 'Syne', sans-serif;
+    font-size: 2rem; font-weight: 800;
+    background: linear-gradient(135deg, #fff 30%, #93C5FD);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    line-height: 1.2; margin-bottom: .5rem;
+  }
+  .subtitle { font-size: .85rem; color: var(--muted); font-weight: 300; }
+
+  /* diagram canvas */
+  .diagram {
+    background: rgba(13,27,75,.5);
+    border: 1px solid rgba(59,130,246,.2);
+    border-radius: 16px;
+    padding: 2.5rem 2rem;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 0 0 1px rgba(255,255,255,.03), 0 40px 80px rgba(0,0,0,.5);
+    animation: fadeUp .7s .2s ease both;
+  }
+
+  /* ── NODES ── */
+  .col {
+    display: flex; flex-direction: column; align-items: center;
+  }
+
+  /* Frontend */
+  .node {
+    border-radius: 10px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; position: relative;
+    transition: transform .2s, box-shadow .2s;
+    cursor: default;
+  }
+  .node:hover { transform: translateY(-3px); }
+
+  .node-frontend {
+    width: 220px; padding: 1rem 1.5rem;
+    background: linear-gradient(135deg, rgba(30,58,138,.6), rgba(13,27,75,.6));
+    border: 1px solid rgba(96,165,250,.35);
+    box-shadow: 0 0 20px rgba(59,130,246,.15);
+  }
+  .node-frontend:hover { box-shadow: 0 0 32px rgba(59,130,246,.3); }
+
+  .node-gateway {
+    width: 320px; padding: 1rem 1.5rem;
+    background: linear-gradient(135deg, rgba(30,58,138,.7), rgba(29,78,216,.5));
+    border: 1px solid rgba(96,165,250,.5);
+    box-shadow: 0 0 24px rgba(59,130,246,.2);
+  }
+  .node-gateway:hover { box-shadow: 0 0 40px rgba(59,130,246,.35); }
+
+  .node-service {
+    width: 148px; padding: .85rem .75rem;
+    background: rgba(15,23,58,.7);
+    border: 1px solid rgba(59,130,246,.25);
+    font-size: .8rem;
+  }
+  .node-service:hover {
+    border-color: rgba(96,165,250,.6);
+    box-shadow: 0 0 20px rgba(59,130,246,.2);
+  }
+
+  .node-db {
+    width: 118px; padding: .65rem .5rem;
+    border-radius: 8px; font-size: .75rem;
+  }
+
+  .node-label {
+    font-family: 'Syne', sans-serif;
+    font-size: .85rem; font-weight: 700;
+    color: white; margin-bottom: 2px;
+  }
+  .node-sublabel {
+    font-size: .68rem; color: #93C5FD; font-weight: 400;
+  }
+  .node-port {
+    display: inline-block; margin-top: 6px;
+    background: rgba(59,130,246,.25); border: 1px solid rgba(59,130,246,.4);
+    border-radius: 99px; padding: 2px 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .62rem; color: var(--accent2);
+  }
+
+  /* DB colors */
+  .db-mysql  { background: rgba(232,131,58,.12); border: 1px solid rgba(232,131,58,.35); }
+  .db-mongo  { background: rgba(77,179,61,.12);  border: 1px solid rgba(77,179,61,.35); }
+  .db-pg     { background: rgba(51,103,145,.12); border: 1px solid rgba(51,103,145,.4); }
+  .db-redis  { background: rgba(220,56,45,.12);  border: 1px solid rgba(220,56,45,.35); }
+
+  .db-dot {
+    width: 8px; height: 8px; border-radius: 50%; margin: 0 auto 5px;
+  }
+  .db-mysql  .db-dot { background: var(--mysql); box-shadow: 0 0 6px var(--mysql); }
+  .db-mongo  .db-dot { background: var(--mongo); box-shadow: 0 0 6px var(--mongo); }
+  .db-pg     .db-dot { background: var(--pg);    box-shadow: 0 0 6px var(--pg); }
+  .db-redis  .db-dot { background: var(--redis); box-shadow: 0 0 6px var(--redis); }
+
+  .db-name {
+    font-family: 'Syne', sans-serif;
+    font-size: .75rem; font-weight: 700; color: white;
+  }
+  .db-schema {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .6rem; color: var(--muted); margin-top: 2px;
+  }
+
+  /* ── SVG CONNECTORS ── */
+  .connectors {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none; overflow: visible;
+  }
+
+  .line-main {
+    stroke: rgba(96,165,250,.5); stroke-width: 1.5;
+    fill: none; stroke-dasharray: 6 4;
+    animation: dash 20s linear infinite;
+  }
+  .line-branch {
+    stroke: rgba(96,165,250,.3); stroke-width: 1.5;
+    fill: none; stroke-dasharray: 5 4;
+    animation: dash 24s linear infinite;
+  }
+  .line-db {
+    stroke-width: 1.5; fill: none;
+    stroke-dasharray: 4 4;
+    animation: dash 18s linear infinite;
+  }
+  .line-mysql  { stroke: rgba(232,131,58,.5); }
+  .line-mongo  { stroke: rgba(77,179,61,.5);  }
+  .line-pg     { stroke: rgba(51,103,145,.6); }
+  .line-redis  { stroke: rgba(220,56,45,.5);  }
+
+  @keyframes dash { to { stroke-dashoffset: -200; } }
+
+  /* ── LAYOUT ROWS ── */
+  .row {
+    display: flex; justify-content: center;
+    align-items: center; gap: 12px;
+    position: relative;
+  }
+  .row-services { gap: 10px; }
+
+  /* vertical connector line segments */
+  .vline {
+    width: 1.5px; background: rgba(96,165,250,.35);
+    margin: 0 auto;
+    position: relative;
+  }
+  .vline::after {
+    content: '▼';
+    position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%);
+    font-size: 8px; color: var(--accent2);
+  }
+
+  /* arrow-only (no triangle) for middle sections */
+  .vline-plain {
+    width: 1.5px; background: rgba(96,165,250,.35);
+    margin: 0 auto;
+  }
+
+  /* branch splitter */
+  .branch-wrap { width: 100%; position: relative; display: flex; justify-content: center; }
+
+  /* HTTPS label */
+  .proto-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: .6rem; color: var(--accent2);
+    border: 1px solid rgba(96,165,250,.3);
+    background: rgba(13,27,75,.6);
+    padding: 1px 7px; border-radius: 99px;
+    position: absolute; left: calc(50% + 4px); top: 50%; transform: translateY(-50%);
+    white-space: nowrap;
+  }
+
+  /* ── LEGEND ── */
+  .legend {
+    display: flex; flex-wrap: wrap; gap: .75rem;
+    justify-content: center; margin-top: 2rem;
+    animation: fadeUp .7s .5s ease both;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 6px;
+    font-size: .7rem; color: var(--muted);
+  }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeDown {
+    from { opacity:0; transform: translateY(-16px); }
+    to   { opacity:1; transform: translateY(0); }
+  }
+  @keyframes fadeUp {
+    from { opacity:0; transform: translateY(16px); }
+    to   { opacity:1; transform: translateY(0); }
+  }
+
+  /* pulse ring on gateway */
+  .pulse-ring {
+    position: absolute; inset: -6px; border-radius: 14px;
+    border: 1px solid rgba(59,130,246,.4);
+    animation: pulse 3s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: .4; transform: scale(1); }
+    50%       { opacity: .0; transform: scale(1.04); }
+  }
+
+  /* tooltip */
+  .tooltip {
+    position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%);
+    background: var(--navy); border: 1px solid var(--border);
+    border-radius: 6px; padding: .5rem .75rem;
+    font-size: .72rem; color: #93C5FD; white-space: nowrap;
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s;
+    z-index: 10;
+  }
+  .node:hover .tooltip { opacity: 1; }
+
+  /* connector SVG overlay */
+  .diagram-inner { position: relative; }
+</style>
+</head>
+<body>
+
+<div class="orb orb1"></div>
+<div class="orb orb2"></div>
+<div class="orb orb3"></div>
+
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="eyebrow">E-Commerce Analytics Platform</div>
+    <div class="title">System Architecture</div>
+    <div class="subtitle">Microservices topology · Docker · REST over HTTP · AWS EC2</div>
+  </div>
+
+  <!-- Diagram -->
+  <div class="diagram">
+    <div class="diagram-inner" id="diag">
+
+      <!-- ROW 1: Frontend -->
+      <div class="row" style="margin-bottom:0">
+        <div class="node node-frontend" id="n-frontend">
+          <div class="node-label">Frontend</div>
+          <div class="node-sublabel">React / Node.js</div>
+          <div class="node-port">:3000</div>
+          <div class="tooltip">Served as isolated Docker container</div>
+        </div>
+      </div>
+
+      <!-- connector: frontend → gateway -->
+      <div style="position:relative; height:36px; display:flex; justify-content:center; align-items:center;">
+        <div class="vline" style="height:36px;"></div>
+        <div class="proto-label">HTTPS</div>
+      </div>
+
+      <!-- ROW 2: API Gateway -->
+      <div class="row" style="margin-bottom:0">
+        <div class="node node-gateway" id="n-gateway" style="position:relative;">
+          <div class="pulse-ring"></div>
+          <div class="node-label">API Gateway</div>
+          <div class="node-sublabel">Single entry point · Rate limiting · Routing</div>
+          <div class="node-port">:8000</div>
+          <div class="tooltip">Routes all client traffic to downstream services</div>
+        </div>
+      </div>
+
+      <!-- SVG branch from gateway to 4 services -->
+      <div style="position:relative; height:60px; width:100%;">
+        <svg width="100%" height="60" style="overflow:visible;" id="branches">
+          <!-- drawn by JS after layout -->
+        </svg>
+      </div>
+
+      <!-- ROW 3: 4 Services -->
+      <div class="row row-services" id="services-row">
+
+        <div class="col">
+          <div class="node node-service" id="n-user">
+            <div class="node-label">User Service</div>
+            <div class="node-sublabel">Auth · JWT · Profiles</div>
+            <div class="node-port">:8001</div>
+            <div class="tooltip">Issues JWT on login/register</div>
+          </div>
+        </div>
+
+        <div class="col">
+          <div class="node node-service" id="n-product">
+            <div class="node-label">Product Svc</div>
+            <div class="node-sublabel">Catalog · Inventory</div>
+            <div class="node-port">:8002</div>
+            <div class="tooltip">Flexible document model for varied SKUs</div>
+          </div>
+        </div>
+
+        <div class="col">
+          <div class="node node-service" id="n-order">
+            <div class="node-label">Order Svc</div>
+            <div class="node-sublabel">Orders · Payments</div>
+            <div class="node-port">:8003</div>
+            <div class="tooltip">ACID transactions for order integrity</div>
+          </div>
+        </div>
+
+        <div class="col">
+          <div class="node node-service" id="n-analytics">
+            <div class="node-label">Analytics</div>
+            <div class="node-sublabel">Dashboard · Metrics</div>
+            <div class="node-port">:8004</div>
+            <div class="tooltip">Admin JWT required · Pre-computed metrics</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- short connectors service → db, drawn by JS -->
+      <div style="position:relative; height:36px; width:100%;">
+        <svg width="100%" height="36" style="overflow:visible;" id="db-lines"></svg>
+      </div>
+
+      <!-- ROW 4: Databases -->
+      <div class="row row-services" id="db-row">
+
+        <div class="node node-db db-mysql" id="n-mysql">
+          <div class="db-dot"></div>
+          <div class="db-name">MySQL</div>
+          <div class="db-schema">users_db</div>
+        </div>
+
+        <div class="node node-db db-mongo" id="n-mongo">
+          <div class="db-dot"></div>
+          <div class="db-name">MongoDB</div>
+          <div class="db-schema">products_db</div>
+        </div>
+
+        <div class="node node-db db-pg" id="n-pg">
+          <div class="db-dot"></div>
+          <div class="db-name">PostgreSQL</div>
+          <div class="db-schema">orders_db</div>
+        </div>
+
+        <div class="node node-db db-redis" id="n-redis">
+          <div class="db-dot"></div>
+          <div class="db-name">Redis</div>
+          <div class="db-schema">(Cache)</div>
+        </div>
+
+      </div>
+
+    </div><!-- diagram-inner -->
+  </div><!-- diagram -->
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:rgba(96,165,250,.7)"></div> REST over HTTP</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--mysql)"></div> MySQL</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--mongo)"></div> MongoDB</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--pg)"></div> PostgreSQL</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--redis)"></div> Redis</div>
+    <div class="legend-item" style="margin-left:1rem; color:#3B82F6; font-size:.68rem;">✦ Hover nodes for details</div>
+  </div>
+
+</div><!-- container -->
+
+<script>
+// Draw SVG connectors after layout is known
+function drawConnectors() {
+  const diag   = document.getElementById('diag');
+  const diagR  = diag.getBoundingClientRect();
+
+  // service nodes
+  const svcIds = ['n-user','n-product','n-order','n-analytics'];
+  const dbIds  = ['n-mysql','n-mongo','n-pg','n-redis'];
+  const dbColors = ['rgba(232,131,58,.6)','rgba(77,179,61,.6)','rgba(51,103,145,.7)','rgba(220,56,45,.6)'];
+
+  function cx(id) {
+    const r = document.getElementById(id).getBoundingClientRect();
+    return r.left + r.width/2 - diagR.left;
+  }
+  function top(id) {
+    const r = document.getElementById(id).getBoundingClientRect();
+    return r.top - diagR.top;
+  }
+  function bot(id) {
+    const r = document.getElementById(id).getBoundingClientRect();
+    return r.bottom - diagR.top;
+  }
+
+  // ── Branch SVG: gateway bottom → service tops ──
+  const branchSvg = document.getElementById('branches');
+  const gwBot = bot('n-gateway');
+  const svcTop = top('n-user');
+
+  // SVG is positioned right after gateway row; get its own top offset
+  const svgR = branchSvg.getBoundingClientRect();
+  const svgOffY = svgR.top - diagR.top;
+
+  const y1 = gwBot - svgOffY;          // gateway bottom relative to SVG
+  const y2 = svcTop - svgOffY;         // service top relative to SVG
+  const gwCx = cx('n-gateway');
+  const mid = (y1 + y2) / 2;
+
+  let html = `<defs>
+    <marker id="arr" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="rgba(96,165,250,.6)"/>
+    </marker>
+  </defs>`;
+
+  svcIds.forEach(id => {
+    const sx = cx(id);
+    // elbow: down from gateway center, across, down to service
+    html += `<path class="line-branch"
+      d="M${gwCx},${y1} L${gwCx},${mid} L${sx},${mid} L${sx},${y2}"
+      marker-end="url(#arr)"
+    />`;
+  });
+
+  branchSvg.innerHTML = html;
+
+  // ── DB lines: service bottom → db top ──
+  const dbSvg = document.getElementById('db-lines');
+  const dbSvgR = dbSvg.getBoundingClientRect();
+  const dbSvgOff = dbSvgR.top - diagR.top;
+
+  let dbHtml = `<defs>`;
+  dbColors.forEach((c, i) => {
+    dbHtml += `<marker id="darr${i}" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="${c}"/>
+    </marker>`;
+  });
+  dbHtml += `</defs>`;
+
+  svcIds.forEach((sId, i) => {
+    const dId = dbIds[i];
+    const sx = cx(sId);
+    const dx = cx(dId);
+    const sy = bot(sId) - dbSvgOff;
+    const dy = top(dId) - dbSvgOff;
+    dbHtml += `<line class="line-db" style="stroke:${dbColors[i]}"
+      x1="${sx}" y1="${sy}" x2="${dx}" y2="${dy}"
+      marker-end="url(#darr${i})"
+    />`;
+  });
+
+  dbSvg.innerHTML = dbHtml;
+}
+
+// Run after fonts/layout settle
+window.addEventListener('load', () => {
+  setTimeout(drawConnectors, 100);
+});
+window.addEventListener('resize', drawConnectors);
+</script>
+</body>
+</html>
