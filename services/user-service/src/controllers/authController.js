@@ -183,7 +183,7 @@ exports.getCurrentUser = async (req, res) => {
     const pool = getPool();
     
     const [users] = await pool.query(
-      'SELECT id, email, name, role, created_at FROM users WHERE id = ?',
+      'SELECT id, email, name, role, phone, created_at FROM users WHERE id = ?',
       [req.user.userId]
     );
 

@@ -248,8 +248,28 @@ exports.updateAddress = async (req, res) => {
     }
 
     await pool.query(
-      'UPDATE user_addresses SET label = ?, street = ?, city = ?, state = ?, zip_code = ?, country = ?, phone = ?, is_default = ? WHERE id = ? AND user_id = ?',
-      [label, street, city, state, zipCode, country, phone, isDefault ? 1 : 0, addressId, userId]
+      `UPDATE user_addresses 
+       SET label = COALESCE(?, label), 
+           street = COALESCE(?, street), 
+           city = COALESCE(?, city), 
+           state = COALESCE(?, state), 
+           zip_code = COALESCE(?, zip_code), 
+           country = COALESCE(?, country), 
+           phone = COALESCE(?, phone), 
+           is_default = COALESCE(?, is_default) 
+       WHERE id = ? AND user_id = ?`,
+      [
+        label || null, 
+        street || null, 
+        city || null, 
+        state || null, 
+        zipCode || null, 
+        country || null, 
+        phone || null, 
+        isDefault !== undefined ? (isDefault ? 1 : 0) : null, 
+        addressId, 
+        userId
+      ]
     );
 
     // Get updated address
