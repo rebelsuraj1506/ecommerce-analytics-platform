@@ -43,7 +43,9 @@ router.get('/:id/details',
 );
 
 // Update user
-router.put('/:id', authenticate, param('id').isInt(), updateUserValidation, userController.updateUser);
+router.route('/:id')
+  .put(authenticate, param('id').isInt(), updateUserValidation, userController.updateUser)
+  .patch(authenticate, param('id').isInt(), updateUserValidation, userController.updateUser);
 
 // Delete user (Admin only)
 router.delete('/:id', authenticate, authorize(['admin']), param('id').isInt(), userController.deleteUser);

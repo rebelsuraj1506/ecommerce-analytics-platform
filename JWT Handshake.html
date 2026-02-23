@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JWT Token — Handshake Analogy</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Clash+Display:wght@400;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;600;700&display=swap');
+
+  :root {
+    --bg: #080c14;
+    --surface: #0d1220;
+    --border: #1a2035;
+    --text: #c8d4f0;
+    --muted: #445070;
+    --normal: #38bdf8;
+    --logout: #f97316;
+    --expired: #a855f7;
+    --danger: #f43f5e;
+    --success: #34d399;
+    --warn: #fbbf24;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    min-height: 100vh;
+    padding: 2rem 1rem 4rem;
+    background-image: radial-gradient(ellipse at 20% 10%, rgba(56,189,248,0.04) 0%, transparent 60%),
+                      radial-gradient(ellipse at 80% 80%, rgba(168,85,247,0.04) 0%, transparent 60%);
+  }
+
+  .page-title {
+    text-align: center;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(2rem, 6vw, 3.5rem);
+    letter-spacing: 0.08em;
+    background: linear-gradient(135deg, var(--normal), var(--expired));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.2rem;
+  }
+
+  .page-sub {
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    margin-bottom: 2rem;
+    text-transform: uppercase;
+  }
+
+  /* TABS */
+  .tabs {
+    display: flex;
+    justify-content: center;
+    gap: 0.4rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+
+  .tab {
+    padding: 0.45rem 1.1rem;
+    border-radius: 0.3rem;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.05em;
+  }
+
+  .tab:hover { color: var(--text); border-color: var(--muted); }
+  .tab.t-normal { border-color: var(--normal); color: var(--normal); background: rgba(56,189,248,0.07); }
+  .tab.t-logout { border-color: var(--logout); color: var(--logout); background: rgba(249,115,22,0.07); }
+  .tab.t-expired { border-color: var(--expired); color: var(--expired); background: rgba(168,85,247,0.07); }
+
+  /* DIAGRAM WRAPPER */
+  .scene { display: none; max-width: 820px; margin: 0 auto; animation: popIn 0.3s ease; }
+  .scene.active { display: block; }
+  @keyframes popIn { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }
+
+  .scene-header {
+    display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;
+  }
+
+  .scene-badge {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem;
+    padding: 0.3rem 0.8rem;
+    border-radius: 0.25rem;
+    letter-spacing: 0.1em;
+  }
+
+  .scene-title { font-size: 1rem; font-weight: 700; letter-spacing: 0.02em; }
+  .scene-desc { font-size: 0.7rem; color: var(--muted); margin-top: 0.2rem; letter-spacing: 0.05em; }
+
+  /* ALERT */
+  .alert {
+    border-radius: 0.4rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.72rem;
+    margin-bottom: 1.2rem;
+    line-height: 1.6;
+    border-left: 3px solid;
+  }
+
+  /* CANVAS */
+  .canvas {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    padding: 1.5rem 1.5rem 1.5rem 3rem;
+    margin-bottom: 1.2rem;
+    overflow: visible;
+    position: relative;
+  }
+
+  /* Phase divider */
+  .phase-label {
+    text-align: center;
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0.2rem 0.8rem;
+    border-radius: 0.2rem;
+    margin: 0.4rem 0 1.4rem;
+    display: inline-block;
+    width: 100%;
+  }
+
+  /* Actors */
+  .actors {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 1.2rem;
+    padding: 0 0 0 0;
+  }
+
+  .actor { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; width: 80px; }
+
+  .actor-box {
+    width: 48px; height: 48px;
+    border-radius: 0.5rem;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem;
+    border: 1.5px solid;
+  }
+
+  .actor-lbl { font-size: 0.6rem; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; }
+
+  /* Lifelines */
+  .lifelines { position: relative; padding: 0 40px; overflow: visible; }
+  .ll { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1.5px dashed var(--border); }
+  .ll-left { left: 40px; }
+  .ll-right { right: 40px; }
+
+  /* Steps */
+  .step { display: flex; align-items: center; margin-bottom: 2.2rem; position: relative; }
+
+  .step-num {
+    position: absolute;
+    left: -2.3rem;
+    width: 1.5rem; height: 1.5rem;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.65rem; font-weight: 700;
+    z-index: 5;
+    flex-shrink: 0;
+  }
+
+  /* Arrow */
+  .arow {
+    display: flex; align-items: center; width: 100%;
+    opacity: 0; transform: translateX(-8px);
+    transition: opacity 0.45s ease, transform 0.45s ease;
+    position: relative;
+  }
+  .arow.vis { opacity: 1; transform: translateX(0); }
+
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+  .aline {
+    flex: 1; height: 2px; position: relative;
+  }
+
+  .aline::after {
+    content: '';
+    position: absolute; top: 50%; width: 7px; height: 7px;
+    border-top: 2px solid; border-right: 2px solid;
+  }
+
+  .go-right .aline::after { right: -1px; transform: translateY(-50%) rotate(45deg); }
+  .go-left .aline::after  { left: -1px;  transform: translateY(-50%) rotate(-135deg); }
+
+  .msg-top {
+    position: absolute; top: -1.25rem; left: 50%; transform: translateX(-50%);
+    font-size: 0.68rem; font-weight: 700; white-space: nowrap;
+    padding: 0.08rem 0.45rem; border-radius: 0.2rem; letter-spacing: 0.04em;
+  }
+
+  .msg-bot {
+    position: absolute; bottom: -1.05rem; left: 50%; transform: translateX(-50%);
+    font-size: 0.62rem; white-space: nowrap; color: var(--muted);
+  }
+
+  /* Token pill */
+  .token-pill {
+    display: inline-block;
+    font-size: 0.6rem;
+    padding: 0.1rem 0.5rem;
+    border-radius: 0.2rem;
+    border: 1px solid;
+    white-space: nowrap;
+    letter-spacing: 0.03em;
+  }
+
+  /* Info grid */
+  .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.7rem; margin-bottom: 1rem; }
+
+  .icard {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 0.5rem; padding: 0.75rem 0.9rem;
+  }
+
+  .icard .ilbl { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 0.25rem; }
+  .icard .ival { font-size: 0.82rem; font-weight: 700; line-height: 1.4; }
+
+  /* Comparison */
+  .compare { max-width: 820px; margin: 2rem auto 0; background: var(--surface); border: 1px solid var(--border); border-radius: 0.75rem; overflow: hidden; }
+  .compare h3 { padding: 0.8rem 1.2rem; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); border-bottom: 1px solid var(--border); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.72rem; }
+  th { padding: 0.6rem 1rem; text-align: left; color: var(--muted); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid var(--border); }
+  td { padding: 0.6rem 1rem; border-bottom: 1px solid rgba(26,32,53,0.6); }
+  tr:last-child td { border-bottom: none; }
+
+  .controls { display: flex; justify-content: center; margin-bottom: 1.2rem; }
+  .play-btn {
+    font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem;
+    padding: 0.45rem 1.4rem; border-radius: 0.3rem; border: 1px solid;
+    cursor: pointer; background: transparent; transition: all 0.2s; letter-spacing: 0.08em;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-title">JWT & Handshakes</div>
+<p class="page-sub">// token lifecycle · logout · expiry · reconnect</p>
+
+<div class="tabs">
+  <button class="tab t-normal" onclick="show('normal')">① Normal Flow</button>
+  <button class="tab" onclick="show('logout')">② Client Logout + Reconnect</button>
+  <button class="tab" onclick="show('expired')">③ Token Expired (Server Side)</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCENE 1 — NORMAL JWT FLOW
+═══════════════════════════════════════════════ -->
+<div class="scene active" id="d-normal">
+  <div class="scene-header">
+    <div class="scene-badge" style="background:rgba(56,189,248,0.1);color:var(--normal);border:1px solid var(--normal)">JWT</div>
+    <div>
+      <div class="scene-title" style="color:var(--normal)">Normal JWT Flow</div>
+      <div class="scene-desc">Login → Access Token → Refresh Token → Re-authenticate</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="play-btn" style="border-color:var(--normal);color:var(--normal);" onclick="animate('normal', 6)">▶ ANIMATE</button>
+  </div>
+
+  <div class="canvas">
+    <div class="actors">
+      <div class="actor">
+        <div class="actor-box" style="background:rgba(56,189,248,0.07);border-color:var(--normal)">💻</div>
+        <div class="actor-lbl">Client</div>
+      </div>
+      <div class="actor">
+        <div class="actor-box" style="background:rgba(56,189,248,0.07);border-color:var(--normal)">🔐</div>
+        <div class="actor-lbl">Auth Server</div>
+      </div>
+    </div>
+
+    <div class="lifelines">
+      <div class="ll ll-left"></div>
+      <div class="ll ll-right"></div>
+
+      <div class="phase-label" style="color:var(--normal);background:rgba(56,189,248,0.06);border:1px solid rgba(56,189,248,0.15)">── Phase 1: Login (3-Way) ──</div>
+
+      <div class="step" id="normal-s1" style="margin-bottom:2.4rem">
+        <span class="step-num" style="background:rgba(56,189,248,0.15);color:var(--normal)">1</span>
+        <div class="arow go-right">
+          <div class="dot" style="background:var(--normal)"></div>
+          <div class="aline" style="background:var(--normal);border-color:var(--normal)">
+            <span class="msg-top" style="background:rgba(56,189,248,0.15);color:var(--normal)">POST /login</span>
+            <span class="msg-bot">{ username, password } — credentials sent</span>
+          </div>
+          <div class="dot" style="background:var(--normal)"></div>
+        </div>
+      </div>
+
+      <div class="step" id="normal-s2" style="margin-bottom:2.4rem">
+        <span class="step-num" style="background:rgba(56,189,248,0.15);color:var(--normal)">2</span>
+        <div class="arow go-left">
+          <div class="dot" style="background:var(--normal)"></div>
+          <div class="aline" style="background:var(--normal);border-color:var(--normal)">
+            <span class="msg-top" style="background:rgba(56,189,248,0.15);color:var(--normal)">200 OK</span>
+            <span class="msg-bot">access_token (15min) + refresh_token (7d)</span>
+          </div>
+          <div class="dot" style="background:var(--normal)"></div>
+        </div>
+      </div>
+
+      <div class="step" id="normal-s3" style="margin-bottom:2.4rem">
+        <span class="step-num" style="background:rgba(56,189,248,0.15);color:var(--normal)">3</span>
+        <div class="arow go-right">
+          <div class="dot" style="background:var(--normal)"></div>
+          <div class="aline" style="background:var(--normal);border-color:var(--normal)">
+            <span class="msg-top" style="background:rgba(56,189,248,0.15);color:var(--normal)">GET /api/data</span>
+            <span class="msg-bot">Authorization: Bearer &lt;access_token&gt;</span>
+          </div>
+          <div class="dot" style="background:var(--normal)"></div>
+        </div>
+      </div>
+
+      <div class="phase-label" style="color:var(--success);background:rgba(52,211,153,0.06);border:1px solid rgba(52,211,153,0.15)">── Phase 2: Token Refresh ──</div>
+
+      <div class="step" id="normal-s4" style="margin-bottom:2.4rem">
+        <span class="step-num" style="background:rgba(52,211,153,0.15);color:var(--success)">4</span>
+        <div class="arow go-right">
+          <div class="dot" style="background:var(--success)"></div>
+          <div class="aline" style="background:var(--success);border-color:var(--success)">
+            <span class="msg-top" style="background:rgba(52,211,153,0.15);color:var(--success)">POST /refresh</span>
+            <span class="msg-bot">{ refresh_token } — access_token expired, use refresh</span>
+          </div>
+          <div class="dot" style="background:var(--success)"></div>
+        </div>
+      </div>
+
+      <div class="step" id="normal-s5" style="margin-bottom:2.4rem">
+        <span class="step-num" style="background:rgba(52,211,153,0.15);color:var(--success)">5</span>
+        <div class="arow go-left">
+          <div class="dot" style="background:var(--success)"></div>
+          <div class="aline" style="background:var(--success);border-color:var(--success)">
+            <span class="msg-top" style="background:rgba(52,211,153,0.15);color:var(--success)">200 OK</span>
+            <span class="msg-bot">new access_token (15min) — refresh_token reused</span>
+          </div>
+          <div class="dot" style="background:var(--success)"></div>
+        </div>
+      </div>
+
+      <div class="step" id="normal-s6" style="margin-bottom:0.3rem">
+        <span class="step-num" style="background:rgba(52,211,153,0.15);color:var(--success)">6</span>
+        <div class="arow go-right">
+          <div class="dot" style="background:var(--success)"></div>
+          <div class="aline" style="background:var(--success);border-color:var(--success)">
+            <span class="msg-top" style="background:rgba(52,211,153,0.15);color:var(--success)">GET /api/data</span>
+            <span class="msg-bot">Authorization: Bearer &lt;new_access_token&gt; ✓</span>
+          </div>
+          <div class="dot" style="background:var(--success)"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="info-grid">
+    <div class="icard">
+      <div class="ilbl">Access Token TTL</div>
+      <div class="ival" style="color:var(--normal)">Short (5–15 min)</div>
+    </div>
+    <div class="icard">
+      <div class="ilbl">Refresh Token TTL</div>
+      <div class="ival" style="color:var(--normal)">Long (7–30 days)</div>
+    </div>
+    <div class="icard">
+      <div class="ilbl">Stored where</div>
+      <div class="ival" style="color:var(--normal);font-size:0.72rem">Access: memory<br>Refresh: httpOnly cookie</div>
+    </div>
+    <div class="icard">
+      <div class="ilbl">Analogy</div>
+      <div class="ival" style="color:var(--normal);font-size:0.72rem">Like TCP SYN → data → keepalive</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     SCENE 2 — CLIENT LOGOUT + RECONNECT
+     (Half-Close Analogy)
+═══════════════════════════════════════════════ -->
+<div class="scene" id="d-logout">
+  <div class="scene-header">
+    <div class="scene-badge" style="background:rgba(249,115,22,0.1);color:var(--logout);border:1px solid var(--logout)">½+3</div>
+    <div>
+      <div class="scene-title" style="color:var(--logout)">Client Logout + Reconnect</div>
+      <div class="scene-desc">JWT analogy of TCP Half-Close — client invalidates, server token lives on</div>
+    </div>
+  </div>
+
+  <div class="alert" style="border-color:var(--logout);background:rgba(249,115,22,0.07);color:var(--warn)">
+    ⚠️ &nbsp;<strong>The Half-Close Problem:</strong> Client deletes its JWT (logout) — but the server has NO built-in way to know. The old token is still cryptographically valid until it expires. This is exactly like TCP Half-Close: <em>one side closed, the other side still active.</em>
+  </div>
+
+  <div class="controls">
+    <button class="play-btn" style="border-color:var(--logout);color:var(--logout);" onclick="animate('logout', 7)">▶ ANIMATE</button>
+  </div>
+
+  <div class="canvas">
+    <div class="actors">
+      <div class="actor">
+        <div class="actor-box" style="background:rgba(249,115,22,0.07);border-color:var(--logout)">💻</div>
+        <div class="actor-lbl">Client</div>
+      </div>
+      <div class="actor">
+        <div class="actor-box" style="background:rgba(249,115,22,0.07);border-color:var(--logout)">🔐</div>
+        <div class="actor-lbl">Auth Server</div>
+      </div>
+    </div>
+
+    <div class="lifelines">
+      <div class="ll ll-left"></div>
+      <div class="ll ll-right"></div>
+
+      <div class="phase-label" style="color:var(--logout);background:rgba(249,115,22,0.06);border:1px solid rgba(249,115,22,0.15)">── Phase 1: Client Logout (Half-Close) ──</div>
+
+      <div class="step" id="logout-s1" style="margin-bottom:2.4rem">
+        <span class="step-num" style="background:rgba(249,115,22,0.15);color:var(--logout)">1</span>
+        <div class="arow go-right">
+          <div class="dot" style="background:var(--logout)"></div>
+          <div class="aline" style="background:var(--logout);border-color:var(--logout)">
+            <span class="msg-top" style="background:rgba(249,115,22,0.15);color:var(--logout)">POST /logout</span>
+            <span class="msg-bot">Client sends logout — like TCP FIN</span>
+          </div>
+          <div class="dot" style="background:var(--logout)"></div>
+        </div>
+      </div>
+
+      <div class="step" id="logout-s2" style="margin-bottom:2.4rem">
+        <span class="step-num" style="background:rgba(249,115,22,0.15);color:var(--logout)">2</span>
+        <div class="arow go-right">
+          <div class="dot" style="background:var(--logout)"></div>
+          <div class="aline" style="background:var(--logout);border-color:var(--logout)">
+            <span class="msg-top" style="background:rgba(249,115,22,0.15);color:var(--logout)">DELETE tokens</span>
+            <span class="msg-bot">Client deletes JWT from memory/cookie locally</span>
+          </div>
+          <div class="dot" style="background:var(--logout)"></div>
+        </div>
+      </div>
+
+      <div class="step" id="logout-s3" style="margin-bottom:2.4rem">
+        <span class="step-num" style="background:rgba(249,115,22,0.15);color:var(--logout)">3</span>
+        <div class="arow go-left">
+          <div class="dot" style="background:var(--danger)"></div>
+          <div class="aline" style="background:var(--danger);border-color:var(--danger)">
+            <span class="msg-top" style="background:rgba(244,63,94,0.15);color:var(--danger)">⚠ TOKEN STILL VALID</span>
+            <span class="msg-bot">Server has no state — old JWT still works until expiry!</span>
+          </div>
+          <div class="dot" style="background:var(--danger)"></div>
+        </div>
+      </div>
+
+      <div class="phase-label" style="color:var(--expired);background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.15)">── Phase 2: Client Reconnects (New Login = New 3-Way) ──</div>
+
+      <div class="step" id="logout-s4" style="margin-bottom:2.4rem">
+        <span class="step-num" style="background:rgba(168,85,247,0.15);color:var(--expired)">4</span>
+        <div class="arow go-right">
+          <div class="dot" style="background:var(--expired)"></div>
+          <div class="aline" style="background:var(--expired);border-color:var(--expired)">
+            <span class="msg-top" style="background:rgba(168,85,247,0.15);color:var(--expired)">POST /login</span>
+            <span class="msg-bot">Fresh login — like new TCP SYN with new ISN</span>
+          </div>
+          <div class="dot" style="background:var(--expired)"></div>
+        </div>
+      </div>
+
+      <div class="step" id="logout-s5" style="margin-bottom:2.4rem">
+        <span class="step-num" style="background:rgba(168,85,247,0.15);color:var(--expired)">5</span>
+        <div class="arow go-left">
+          <div class="dot" style="background:var(--expired)"></div>
+          <div class="aline" style="background:var(--expired);border-color:var(--expired)">
+            <span class="msg-top" style="background:rgba(168,85,247,0.15);color:var(--expired)">200 OK</span>
+            <span class="msg-bot">Brand new access_token + refresh_token issued</span>
+          </div>
+          <div class="dot" style="background:var(--expired)"></div>
+        </div>
+      </div>
+
+      <div class="step" id="logout-s6" style="margin-bottom:2.4rem">
+        <span class="step-num" style="background:rgba(168,85,247,0.15);color:var(--expired)">6</span>
+        <div class="arow go-right">
+          <div class="dot" style="background:var(--expired)"></div>
+          <div class="aline" style="background:var(--expired);border-color:var(--expired)">
+            <span class="msg-top" style="background:rgba(168,85,247,0.15);color:var(--expired)">GET /api/data</span>
+            <span class="msg-bot">Authorization: Bearer &lt;NEW token&gt; — not old one</span>
+          </div>
+          <div class="dot" style="background:var(--expired)"></div>
+        </div>
+      </div>
+
+      <div class="step" id="logout-s7" style="margin-bottom:0.3rem">
+        <span class="step-num" style="background:rgba(168,85,247,0.15);color:var(--expired)">7</span>
+        <div class="arow go-left">
+          <div class="dot" style="background:var(--expired)"></div>
+          <div class="aline" style="background:var(--expired);border-color:var(--expired)">
+            <span class="msg-top" style="background:rgba(168,85,247,0.15);color:var(--expired)">200 OK ✓</span>
+            <span class="msg-bot">New session active — old token ignored/expired</span>
+          </div>
+          <div class="dot" style="background:var(--expired)"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="info-grid">
+    <div class="icard">
+      <div class="ilbl">TCP Equivalent</div>
+      <div class="ival" style="color:var(--logout);font-size:0.75rem">Client FIN → server still active → new SYN</div>
+    </div>
+    <div class="icard">
+      <div class="ilbl">Can old token be reused?</div>
+      <div class="ival" style="color:var(--danger)">✗ Should not — but CAN until expiry</div>
+    </div>
+    <div class="icard">
+      <div class="ilbl">Fix: Token Blacklist</div>
+      <div class="ival" style="color:var(--success);font-size:0.72rem">Store invalidated JTI in Redis on logout</div>
+    </div>
+    <div class="icard">
+      <div class="ilbl">New Token</div>
+      <div class="ival" style="color:var(--expired);font-size:0.72rem">Completely new jti + iat — not a continuation</div>
+    </div>
+  </div>
+
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:0.5rem;padding:1rem 1.2rem;">
+    <div style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:0.6rem;">TCP ↔ JWT Mapping</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem;font-size:0.7rem;">
+      <div style="color:var(--muted)">TCP FIN (client)</div><div style="color:var(--logout)">→ Client deletes JWT / calls /logout</div>
+      <div style="color:var(--muted)">Server still sending data</div><div style="color:var(--danger)">→ Old token still valid on server</div>
+      <div style="color:var(--muted)">New SYN with fresh ISN</div><div style="color:var(--expired)">→ POST /login returns brand new JWT</div>
+      <div style="color:var(--muted)">Cannot reuse old connection</div><div style="color:var(--success)">→ Must re-authenticate, not reuse old token</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     SCENE 3 — TOKEN EXPIRED (SERVER SIDE)
+═══════════════════════════════════════════════ -->
+<div class="scene" id="d-expired">
+  <div class="scene-header">
+    <div class="scene-badge" style="background:rgba(168,85,247,0.1);color:var(--expired);border:1px solid var(--expired)">EXP</div>
+    <div>
+      <div class="scene-title" style="color:var(--expired)">Token Expired — Server Side Close</div>
+      <div class="scene-desc">Server rejects expired token → client must re-authenticate</div>
+    </div>
+  </div>
+
+  <div class="alert" style="border-color:var(--expired);background:rgba(168,85,247,0.07);color:#c084fc">
+    🕐 &nbsp;<strong>Server-Side Close:</strong> The server's exp claim fires — the token is now dead on the server. The client still holds the token but it's useless. Analogous to TCP where the <em>server sends FIN</em> — client must open a new connection.
+  </div>
+
+  <div class="controls">
+    <button class="play-btn" style="border-color:var(--expired);color:var(--expired);" onclick="animate('expired', 7)">▶ ANIMATE</button>
+  </div>
+
+  <div class="canvas">
+    <div class="actors">
+      <div class="actor">
+        <div class="actor-box" style="background:rgba(168,85,247,0.07);border-color:var(--expired)">💻</div>
+        <div class="actor-lbl">Client</div>
+      </div>
+      <div class="actor">
+        <div class="actor-box" style="background:rgba(168,85,247,0.07);border-color:var(--expired)">🔐</div>
+        <div class="actor-lbl">Auth Server</div>
+      </div>
+    </div>
+
+    <div class="lifelines">
+      <div class="ll ll-left"></div>
+      <div class="ll ll-right"></div>
+
+      <div class="phase-label" style="color:var(--expired);background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.15)">── Phase 1: Token Expires on Server ──</div>
+
+      <div class="step" id="expired-s1" style="margin-bottom:2.4rem">
+        <span class="step-num" style="background:rgba(168,85,247,0.15);color:var(--expired)">1</span>
+        <div class="arow go-right">
+          <div class="dot" style="background:var(--expired)"></div>
+          <div class="aline" style="background:var(--expired);border-color:var(--expired)">
+            <span class="msg-top" style="background:rgba(168,85,247,0.15);color:var(--expired)">GET /api/data</span>
+            <span class="msg-bot">Authorization: Bearer &lt;expired_token&gt;</span>
+          </div>
+          <div class="dot" style="background:var(--expired)"></div>
+        </div>
+      </div>
+
+      <div class="step" id="expired-s2" style="margin-bottom:2.4rem">
+        <span class="step-num" style="background:rgba(168,85,247,0.15);color:var(--expired)">2</span>
+        <div class="arow go-left">
+          <div class="dot" style="background:var(--danger)"></div>
+          <div class="aline" style="background:var(--danger);border-color:var(--danger)">
+            <span class="msg-top" style="background:rgba(244,63,94,0.15);color:var(--danger)">401 Unauthorized</span>
+            <span class="msg-bot">WWW-Authenticate: Bearer error="invalid_token" — like server FIN</span>
+          </div>
+          <div class="dot" style="background:var(--danger)"></div>
+        </div>
+      </div>
+
+      <div class="phase-label" style="color:var(--success);background:rgba(52,211,153,0.06);border:1px solid rgba(52,211,153,0.15)">── Phase 2: Try Refresh Token ──</div>
+
+      <div class="step" id="expired-s3" style="margin-bottom:2.4rem">
+        <span class="step-num" style="background:rgba(52,211,153,0.15);color:var(--success)">3</span>
+        <div class="arow go-right">
+          <div class="dot" style="background:var(--success)"></div>
+          <div class="aline" style="background:var(--success);border-color:var(--success)">
+            <span class="msg-top" style="background:rgba(52,211,153,0.15);color:var(--success)">POST /refresh</span>
+            <span class="msg-bot">{ refresh_token } — if still valid, get new access_token</span>
+          </div>
+          <div class="dot" style="background:var(--success)"></div>
+        </div>
+      </div>
+
+      <div class="step" id="expired-s4" style="margin-bottom:2.4rem">
+        <span class="step-num" style="background:rgba(52,211,153,0.15);color:var(--success)">4</span>
+        <div class="arow go-left">
+          <div class="dot" style="background:var(--success)"></div>
+          <div class="aline" style="background:var(--success);border-color:var(--success)">
+            <span class="msg-top" style="background:rgba(52,211,153,0.15);color:var(--success)">200 OK</span>
+            <span class="msg-bot">new access_token issued — like new SYN-ACK</span>
+          </div>
+          <div class="dot" style="background:var(--success)"></div>
+        </div>
+      </div>
+
+      <div class="phase-label" style="color:var(--danger);background:rgba(244,63,94,0.06);border:1px solid rgba(244,63,94,0.15)">── Phase 3: If Refresh Also Expired → Full Re-login ──</div>
+
+      <div class="step" id="expired-s5" style="margin-bottom:2.4rem">
+        <span class="step-num" style="background:rgba(244,63,94,0.15);color:var(--danger)">5</span>
+        <div class="arow go-right">
+          <div class="dot" style="background:var(--danger)"></div>
+          <div class="aline" style="background:var(--danger);border-color:var(--danger)">
+            <span class="msg-top" style="background:rgba(244,63,94,0.15);color:var(--danger)">POST /refresh</span>
+            <span class="msg-bot">refresh_token also expired — both sides closed</span>
+          </div>
+          <div class="dot" style="background:var(--danger)"></div>
+        </div>
+      </div>
+
+      <div class="step" id="expired-s6" style="margin-bottom:2.4rem">
+        <span class="step-num" style="background:rgba(244,63,94,0.15);color:var(--danger)">6</span>
+        <div class="arow go-left">
+          <div class="dot" style="background:var(--danger)"></div>
+          <div class="aline" style="background:var(--danger);border-color:var(--danger)">
+            <span class="msg-top" style="background:rgba(244,63,94,0.15);color:var(--danger)">401 Unauthorized</span>
+            <span class="msg-bot">Both tokens dead — full re-login required</span>
+          </div>
+          <div class="dot" style="background:var(--danger)"></div>
+        </div>
+      </div>
+
+      <div class="step" id="expired-s7" style="margin-bottom:0.3rem">
+        <span class="step-num" style="background:rgba(168,85,247,0.15);color:var(--expired)">7</span>
+        <div class="arow go-right">
+          <div class="dot" style="background:var(--expired)"></div>
+          <div class="aline" style="background:var(--expired);border-color:var(--expired)">
+            <span class="msg-top" style="background:rgba(168,85,247,0.15);color:var(--expired)">POST /login</span>
+            <span class="msg-bot">Full credential re-auth — brand new tokens issued ✓</span>
+          </div>
+          <div class="dot" style="background:var(--expired)"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="info-grid">
+    <div class="icard">
+      <div class="ilbl">HTTP Status</div>
+      <div class="ival" style="color:var(--danger)">401 Unauthorized</div>
+    </div>
+    <div class="icard">
+      <div class="ilbl">TCP Equivalent</div>
+      <div class="ival" style="color:var(--expired);font-size:0.72rem">Server FIN → client must new SYN</div>
+    </div>
+    <div class="icard">
+      <div class="ilbl">Recovery Path A</div>
+      <div class="ival" style="color:var(--success);font-size:0.72rem">Use refresh_token → new access_token</div>
+    </div>
+    <div class="icard">
+      <div class="ilbl">Recovery Path B</div>
+      <div class="ival" style="color:var(--danger);font-size:0.72rem">Both expired → full /login again</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- COMPARISON -->
+<div class="compare">
+  <h3>// TCP Handshake → JWT Lifecycle Mapping</h3>
+  <table>
+    <tr>
+      <th>TCP Concept</th>
+      <th style="color:var(--normal)">JWT Equivalent</th>
+      <th>Notes</th>
+    </tr>
+    <tr>
+      <td style="color:var(--muted)">3-Way SYN Handshake</td>
+      <td style="color:var(--normal)">POST /login → 200 OK + tokens</td>
+      <td style="color:var(--muted)">Establishes session</td>
+    </tr>
+    <tr>
+      <td style="color:var(--muted)">Data transfer</td>
+      <td style="color:var(--normal)">API calls with Bearer token</td>
+      <td style="color:var(--muted)">Active session</td>
+    </tr>
+    <tr>
+      <td style="color:var(--muted)">Client FIN (Half-Close)</td>
+      <td style="color:var(--logout)">Client logout / delete token</td>
+      <td style="color:var(--danger)">Server token still valid!</td>
+    </tr>
+    <tr>
+      <td style="color:var(--muted)">Server FIN</td>
+      <td style="color:var(--expired)">Token exp claim fires → 401</td>
+      <td style="color:var(--muted)">Server closes session</td>
+    </tr>
+    <tr>
+      <td style="color:var(--muted)">New SYN with fresh ISN</td>
+      <td style="color:var(--expired)">POST /login → brand new JWT (new jti)</td>
+      <td style="color:var(--muted)">Cannot reuse old token</td>
+    </tr>
+    <tr>
+      <td style="color:var(--muted)">TCP Keepalive</td>
+      <td style="color:var(--success)">POST /refresh → new access_token</td>
+      <td style="color:var(--muted)">Keep session alive</td>
+    </tr>
+    <tr>
+      <td style="color:var(--muted)">Stale packet protection</td>
+      <td style="color:var(--success)">jti blacklist in Redis on logout</td>
+      <td style="color:var(--muted)">Prevents token reuse</td>
+    </tr>
+  </table>
+</div>
+
+<script>
+  function show(type) {
+    document.querySelectorAll('.scene').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => { t.className = 'tab'; });
+    document.getElementById('d-' + type).classList.add('active');
+    const tabs = document.querySelectorAll('.tab');
+    const map = { normal: 0, logout: 1, expired: 2 };
+    const cls = { normal: 't-normal', logout: 't-logout', expired: 't-expired' };
+    tabs[map[type]].classList.add(cls[type]);
+    setTimeout(() => {
+      const counts = { normal: 6, logout: 7, expired: 7 };
+      animate(type, counts[type]);
+    }, 100);
+  }
+
+  function animate(type, count) {
+    for (let i = 1; i <= count; i++) {
+      const step = document.getElementById(type + '-s' + i);
+      if (step) { const r = step.querySelector('.arow'); if (r) r.classList.remove('vis'); }
+    }
+    for (let i = 1; i <= count; i++) {
+      const step = document.getElementById(type + '-s' + i);
+      if (step) {
+        const r = step.querySelector('.arow');
+        if (r) setTimeout(() => r.classList.add('vis'), i * 500);
+      }
+    }
+  }
+
+  setTimeout(() => animate('normal', 6), 400);
+</script>
+</body>
+</html>
